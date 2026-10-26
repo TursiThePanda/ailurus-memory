@@ -13,7 +13,7 @@
 #define OldName "AI Memory"
 ; Kept in step with version.py by test_packaging -- an installer announcing the
 ; wrong version is how a user ends up unable to say what they are running.
-#define AppVersion "1.2.1"
+#define AppVersion "1.2.2"
 #define AppExe "ai-memory.exe"
 
 [Setup]

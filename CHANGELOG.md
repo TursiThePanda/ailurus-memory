@@ -4,6 +4,12 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [1.2.2] — 2026-10-26
+
+The first release with the container image (`ghcr.io/tursithepanda/ailurus-memory`).
+1.2.1's image build passed its tests but failed the workflow's last check, which still
+imported the pre-package module names. No change to the program itself.
+
 ## [1.2.1] — 2026-10-26
 
 First public release, as **Ailurus Memory**, under the PolyForm Noncommercial 1.0.0
@@ -104,4 +110,5 @@ The first release for other people's machines.
   Windows installer and tray, portable mode, macOS paths; consistent backups of the
   live database.
 
+[1.2.2]: https://github.com/TursiThePanda/ailurus-memory/releases/tag/v1.2.2
 [1.2.1]: https://github.com/TursiThePanda/ailurus-memory/releases/tag/v1.2.1

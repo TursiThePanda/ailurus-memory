@@ -328,7 +328,7 @@ the memory is locked again, unless you use the passphrase secret. Agents reconne
 themselves once it is unlocked. Their keys live in the database and survive any
 restart. Read [CHANGELOG.md](../../CHANGELOG.md) before you jump a minor version.
 
-Prefer pinning a version (`ghcr.io/tursithepanda/ailurus-memory:1.2.1`) over `latest`
+Prefer pinning a version (`ghcr.io/tursithepanda/ailurus-memory:1.2.2`) over `latest`
 on a server you do not watch.
 
 ---
@@ -340,12 +340,12 @@ mode. No key file is involved: the signature is tied to the GitHub Actions workf
 built the image, in this repository, at that tag. To check it:
 
 ```bash
-cosign verify ghcr.io/tursithepanda/ailurus-memory:1.2.1 \
-  --certificate-identity "https://github.com/TursiThePanda/ailurus-memory/.github/workflows/build-docker.yml@refs/tags/v1.2.1" \
+cosign verify ghcr.io/tursithepanda/ailurus-memory:1.2.2 \
+  --certificate-identity "https://github.com/TursiThePanda/ailurus-memory/.github/workflows/build-docker.yml@refs/tags/v1.2.2" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
 
-Replace both `1.2.1` with the version you pull. To accept any release tag of this
+Replace both `1.2.2` with the version you pull. To accept any release tag of this
 repository instead of one exact tag:
 
 ```bash
@@ -357,8 +357,8 @@ cosign verify ghcr.io/tursithepanda/ailurus-memory:latest \
 The image also carries an SBOM and SLSA build provenance:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.2.1 --format '{{ json .SBOM }}'
-docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.2.1 --format '{{ json .Provenance }}'
+docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.2.2 --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.2.2 --format '{{ json .Provenance }}'
 ```
 
 ---
