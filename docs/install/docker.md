@@ -339,6 +339,10 @@ Every published image is signed with [cosign](https://docs.sigstore.dev/) in "ke
 mode. No key file is involved: the signature is tied to the GitHub Actions workflow that
 built the image, in this repository, at that tag. To check it:
 
+Use **cosign 3.x**: the images are signed with the newer bundle format, which cosign 2.x
+does not find ("no signatures found"). Without installing it:
+`docker run --rm gcr.io/projectsigstore/cosign:v3.0.6 verify ...`
+
 ```bash
 cosign verify ghcr.io/tursithepanda/ailurus-memory:1.2.2 \
   --certificate-identity "https://github.com/TursiThePanda/ailurus-memory/.github/workflows/build-docker.yml@refs/tags/v1.2.2" \
