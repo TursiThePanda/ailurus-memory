@@ -109,7 +109,7 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           docker run --rm "$IMAGE@$DIGEST" python -c \
-            "import server, webapp, embed; assert embed.is_ready(), 'model missing'"
+            "from ai_memory.server import server; from ai_memory.web import webapp; from ai_memory.features import embed; assert embed.is_ready(), 'model missing'"
           docker run --rm "$IMAGE@$DIGEST" ai-memory --version
 
       - name: Export the digest
