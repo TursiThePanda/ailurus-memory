@@ -1,0 +1,3 @@
+# Build-time requirement of the image: the project is installed with
+# --no-build-isolation, so its build backend has to come from the lock as well.
+setuptools>=68

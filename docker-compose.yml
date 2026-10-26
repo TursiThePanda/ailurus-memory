@@ -1,0 +1,80 @@
+# Ailurus Memory -- example Compose file. See docs/install/docker.md for the walkthrough.
+#
+#   docker compose up -d
+#   docker attach ailurus-memory        # type the passphrase, then detach: Ctrl-P Ctrl-Q
+#
+# Replace memory.example.org with the name your clients will use, and adjust the
+# allow-lists. Everything marked "seed" is read on the FIRST start only and copied into
+# the encrypted settings; after that the admin web owns it, and changing it here does
+# nothing.
+name: ailurus-memory
+
+services:
+  ailurus-memory:
+    image: ghcr.io/tursithepanda/ailurus-memory:latest
+    container_name: ailurus-memory
+    restart: unless-stopped
+
+    # HOST NETWORKING, on purpose. The admin web and the optional MCP allow-list decide by
+    # the client's IP address. On Docker's default bridge network every request appears
+    # to come from the bridge gateway (172.17.0.1 or similar) -- a private address -- so
+    # an allow-list would let everybody in or nobody. With the host network the app sees
+    # the real client address. (`ports:` does not apply with host networking: the app
+    # listens on the host's port directly, 8080 by default.)
+    network_mode: host
+
+    # Without a passphrase secret the container waits for the passphrase on its terminal.
+    # These two give it one, so `docker attach ailurus-memory` can unlock it.
+    stdin_open: true
+    tty: true
+
+    # A minimal init as PID 1: forwards `docker stop` cleanly and reaps child processes.
+    init: true
+
+    environment:
+      # seed: the host name(s) clients use in the URL. Requests for any other Host header
+      # are refused (DNS-rebinding protection). Comma-separated.
+      AI_MEMORY_ALLOWED_HOSTS: "memory.example.org,localhost,127.0.0.1"
+      # seed: who may open the admin web. MANDATORY restriction -- it cannot be
+      # "anywhere". Left unset it defaults to localhost + the private ranges
+      # (127.0.0.0/8, ::1, 10/8, 172.16/12, 192.168/16, fc00::/7, fe80::/10).
+      # Narrow it to your LAN, e.g.:
+      # AI_MEMORY_ADMIN_ALLOW: "127.0.0.1/32,::1/128,192.0.2.0/24"
+      # seed: who may reach /mcp. Optional: unset = anywhere, every request still needs
+      # an agent key.
+      # AI_MEMORY_MCP_ALLOW: "192.0.2.0/24,198.51.100.0/24"
+      # seed: a reverse proxy in front (Caddy, nginx, Traefik). Only from these addresses
+      # is X-Forwarded-For / X-Forwarded-Proto believed.
+      # AI_MEMORY_TRUSTED_PROXIES: "192.0.2.10/32"
+      # seed: TLS. The image default is a self-signed certificate generated on the first
+      # start (kept on /data). Set "off" only if a TLS proxy terminates HTTPS for you.
+      # AI_MEMORY_TLS: "off"
+      # seed: the port (host networking: this is the port on the host).
+      # AI_MEMORY_PORT: "8080"
+
+      # UNATTENDED UNLOCK -- uncomment together with the `secrets:` blocks below.
+      # AI_MEMORY_PASSPHRASE_FILE: /run/secrets/ai_memory_passphrase
+
+    volumes:
+      # The database, the config (incl. the TLS certificate) and attachment read-outs.
+      # A named volume is created owned by the container user (uid 10001). For a bind
+      # mount instead, prepare it first: mkdir -p ./data && sudo chown 10001:10001 ./data
+      - ailurus-data:/data
+      # Optional: where backups go (the scheduled export set in the admin web, or
+      # `docker exec ailurus-memory python -m ai_memory.features.backup --dest /backup`). Use another disk.
+      # - /srv/backups/ailurus-memory:/backup
+
+    # secrets:
+    #   - ai_memory_passphrase
+
+# secrets:
+#   ai_memory_passphrase:
+#     # A file containing only the passphrase. Compose mounts it as it is on disk, so
+#     # it must be readable by the container user and nobody else:
+#     #   sudo chown 10001:10001 ai_memory_passphrase.txt && sudo chmod 400 ai_memory_passphrase.txt
+#     # The passphrase then sits on this disk next to the data it protects: that is the
+#     # price of an unattended start. See SECURITY.md.
+#     file: ./ai_memory_passphrase.txt
+
+volumes:
+  ailurus-data:

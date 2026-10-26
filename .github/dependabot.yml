@@ -1,0 +1,15 @@
+# Proposes updates for what is pinned by hash: the actions (by commit SHA) and the
+# image's base (by digest). Every proposal is a pull request to review -- nothing is
+# merged automatically. The image's Python lock is NOT here: it is compiled from
+# pyproject.toml inside the base image, which Dependabot cannot reproduce; refresh it
+# with docker/update-lock.sh.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

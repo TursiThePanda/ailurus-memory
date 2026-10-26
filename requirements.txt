@@ -1,0 +1,25 @@
+# mcp 2.x renamed FastMCP to MCPServer (mcp.server.fastmcp -> mcp.server.mcpserver) and
+# moved host/port off the constructor onto the transport. Ported 2026-08-29; the <3 bound
+# is the ordinary major-version guard, not a hold-back.
+#
+# The history worth keeping: this project ran happily on an unpinned mcp>=1.28 for months
+# because the live instance had been installed while 1.x was current. A from-scratch
+# install pulled 2.x and did not start at all -- a breakage invisible to the author and
+# fatal to the first new user. Any "can somebody else install this" work starts with a
+# from-scratch install.
+mcp>=2.1,<3
+cryptography>=42
+itsdangerous>=2.0
+
+# per-platform data/cache/config directories -- on Linux it returns exactly the
+# paths that used to be hardcoded, so it does not move an existing install (see paths.py)
+platformdirs>=4
+
+# Optional "remember the master passphrase" -- goes into the OS credential store
+# (Windows Credential Manager / Secret Service / Keychain), NEVER a file we write.
+# Pure Python on every platform (SecretStorage + jeepney on Linux), so it bundles.
+keyring>=25
+
+# The tray (Windows) and the semantic layer are OPTIONAL and deliberately not here:
+#   pip install -e '.[tray]'      pystray + pillow, the Windows front-end
+#   pip install -e '.[semantic]'  onnxruntime + tokenizers + numpy

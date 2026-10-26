@@ -1,0 +1,80 @@
+  Ailurus Memory VERSION -- Linux, portable
+
+One binary and an empty marker file. Nothing is installed, no systemd unit is written,
+and everything the program stores stays in this folder. For the real installation --
+the systemd user unit, the tray icon, the desktop entries -- take the
+"Source code" archive of the same release and run ./packaging/install.sh instead.
+
+
+RUNNING IT
+
+    tar xzf ailurus-memory-VERSION-linux-portable.tar.gz
+    cd ailurus-memory-VERSION-portable
+    ./ai-memory setup      create the memory: passphrase, store, first API key
+    ./ai-memory start      run the server
+    ./ai-memory status     what is running, and where the data is
+
+    WRITE THE PASSPHRASE DOWN SOMEWHERE SAFE BEFORE YOU CHOOSE IT.
+    It is never stored -- not by this program, not in any backup. Without it the
+    memory and every copy of it are permanently unreadable. By design, no way back.
+
+
+THE MARKER FILE
+
+The empty file ai-memory.portable next to the binary is the switch. While it is there,
+the database, the logs and the config live in ./data beside the binary. Delete it and
+the same binary uses ~/.local/share/ai-memory and ~/.config/ai-memory, like an installed
+copy -- and your memory will look lost when it is only in the other place. Keep the
+binary and the marker together; move the whole directory, not just the binary.
+
+`./ai-memory status` prints the database path, which is how you check the marker is
+doing its job.
+
+
+ONE AT A TIME
+
+The port is 8080 (the memory and the admin web share it). An installed copy uses the
+same one, so only one of them runs at a time. Either stop that one, or give this one
+its own:
+
+    AI_MEMORY_PORT=8090 ./ai-memory start
+
+Everything else is overridable the same way: AI_MEMORY_DATA_DIR, AI_MEMORY_CONFIG_DIR,
+AI_MEMORY_DB, AI_MEMORY_BACKUP_DEST. An environment variable beats the portable folder.
+
+
+WHAT IS NOT IN HERE
+
+  The tray icon.       It needs the system python's gi (PyGObject), which a bundle
+                       cannot carry. The installed version has it.
+  Semantic search.     The embedding model is a 449 MB download, in neither binary.
+                       Plain search, tags and the admin web all work without it.
+  Autostart.           Nothing is registered anywhere. Start it by hand, or write your
+                       own systemd unit pointing at this binary.
+
+
+CONNECTING AN AI
+
+`./ai-memory setup` prints a ready-made config block. Claude Code takes one command:
+
+    claude mcp add ai-memory --transport http http://127.0.0.1:8080/mcp \
+        --header "Authorization: Bearer YOUR-KEY-HERE"
+
+The API key is shown once and cannot be read back out of the database. Lost keys are
+rotated in the admin web, not recovered.
+
+
+ADMIN WEB AND BACKUPS
+
+http://127.0.0.1:8080, log in with the master passphrase -- the memories in the clear,
+the agents and their keys, and Settings, where the scheduled encrypted export lives.
+Set that up on the first day and point it OUTSIDE this folder: a backup that lives
+inside the thing it backs up dies with it. What it writes is the encrypted database, so
+it is safe to put on a NAS or in cloud storage -- but the passphrase is not in it.
+
+
+IF SOMETHING GOES WRONG
+
+    ./data/logs/startup.log
+
+It records how it was started, which database it found and where it stopped.

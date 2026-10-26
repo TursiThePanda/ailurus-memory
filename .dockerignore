@@ -1,0 +1,21 @@
+# The build context is the project tree. Everything the image does NOT need stays out,
+# both for size and so that no local state (a database, a venv, release binaries) can
+# ever end up inside an image by accident.
+.git
+.claude
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+*.log
+*.pid
+build/
+dist/
+releases/
+data/
+ai_memory_mcp.egg-info/
+*.egg-info/
+# The runtime stage copies sources by name; tests/ and .github/ ARE kept in the
+# context on purpose, for the `test` stage (`docker build --target test .`) --
+# test_packaging reads the workflow files.

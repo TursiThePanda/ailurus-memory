@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-memory-mcp"
+# Single source of truth in version.py, so the package, the server's serverInfo and
+# `ai-memory --version` cannot disagree.
+dynamic = ["version"]
+description = "Shared, versioned memory for multiple AI agents over MCP (encrypted SQLite store)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "PolyForm-Noncommercial-1.0.0" }
+authors = [{ name = "David Urban" }]
+dependencies = [
+    "mcp>=2.1,<3",
+    "cryptography>=42",
+    "itsdangerous>=2.0",
+    "platformdirs>=4",
+    "keyring>=25",
+]
+
+# Semantic search and duplicate detection run a small embedding model inside this
+# application. Kept optional so the core install stays three pure-Python packages —
+# everything except the semantic layer works without these.
+[project.optional-dependencies]
+# The tray front-end, which is how this runs on Windows. Optional for the same reason
+# the semantic layer is: Pillow is a native dependency, and a Linux install driven by
+# the systemd unit never needs either package. tray.py imports both lazily, so the
+# core install works with them absent.
+tray = [
+    "pystray>=0.19",
+    "pillow>=10",
+]
+# The passphrase dialog is drawn in-process either way (see passdialog.py); this only
+# changes which toolkit draws it. Qt looks native in KDE, ttk looks native on Windows,
+# and ttk is in the standard library -- so this is ~230 MB bought purely for how one
+# dialog looks on a Linux desktop, which is why it is opt-in.
+qt = [
+    "PySide6-Essentials>=6.6",
+]
+semantic = [
+    "onnxruntime>=1.17",
+    "tokenizers>=0.15",
+    "numpy>=1.24",
+]
+
+[project.scripts]
+# `ai-memory` is the one users are meant to type. ai-memory-manage is the agent/key/tag
+# admin CLI; ai-memory-mcp runs the MCP server on stdio; ai-memory-web is kept as an
+# alias of the one-port app for launch lines from before 1.2.0.
+ai-memory = "ai_memory.cli:main"
+ai-memory-mcp = "ai_memory.server.server:main"
+ai-memory-web = "ai_memory.server.app:main"
+ai-memory-manage = "ai_memory.manage:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "ai_memory.core.version.__version__" }
+
+[tool.setuptools.packages.find]
+# Everything lives in the ai_memory package since 1.2.0 (it was 23 loose modules at the
+# top level, each of which had to be listed by hand -- a missing entry once broke a
+# from-scratch install with ModuleNotFoundError while every test passed).
+include = ["ai_memory*"]
+
+[tool.setuptools.package-data]
+ai_memory = ["assets/*"]

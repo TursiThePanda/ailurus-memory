@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+
+# PyInstaller output. The .spec IS committed -- it is source; dist/ and build/ are not.
+build/
+dist/
+
+# Runtime state moved into the per-platform data dir in the cross-platform work
+# (paths.py), so the old in-repo pid/log files no longer exist. Kept here briefly so a
+# working copy from before that change does not suddenly show them as untracked.
+.server.pid
+.web.pid
+server.log
+web.log
+
+# build artefact, rewritten by every `pip install -e .`
+ai_memory_mcp.egg-info/
+
+# Release artefacts: binaries belong beside the project, not inside its history.
+releases/

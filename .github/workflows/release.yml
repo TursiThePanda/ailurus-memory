@@ -1,0 +1,238 @@
+# Builds every downloadable of a release and attaches them to the GitHub Release:
+#
+#   ailurus-memory-<v>-windows-setup.exe          Inno Setup installer
+#   ailurus-memory-<v>-windows-portable.zip       the same exe + the portable marker
+#   ailurus-memory-<v>-linux-portable.tar.gz      Linux x86_64 binary + the marker
+#   SHA256SUMS                                    checksums of the three above
+#
+# (The container image is built by build-docker.yml from the same tag.)
+#
+# Why CI at all: PyInstaller CANNOT cross-compile -- a Windows .exe can only be produced
+# on Windows, and there is no Windows machine here. Before 1.2.0 the portable archives and
+# the checksums were packed by hand from releases/v<ver>/; now the same make-portable.sh
+# runs here, on the binaries built here, so what is published is exactly what was tested.
+#
+# Asset names carry the outside name (Ailurus Memory). The program inside is still
+# called `ai-memory`, and so are its data directories.
+#
+# Every action is pinned by full commit SHA, with the version in a comment.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:        # builds and tests everything; attaches nothing
+
+permissions: {}
+
+jobs:
+  # A tag must name the commit whose version.py says the same version, or the release
+  # would announce one version and ship another.
+  version:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: v
+        run: |
+          v="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' ai_memory/core/version.py)"
+          [ -n "$v" ] || { echo "::error::no version in version.py"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "${GITHUB_REF_NAME#v}" != "$v" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version.py ($v)"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One Python version everywhere: the dev venv, the container image, both CI jobs.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ".[tray]"
+          pip install pyinstaller
+
+      # Runs the same scripts as on Linux. They start real servers on localhost, so
+      # this is also the only place the project is genuinely exercised on Windows.
+      - name: Test
+        env:
+          AI_MEMORY_PASSPHRASE: ci-test-passphrase
+        run: |
+          $failed = @()
+          Get-ChildItem tests\test_*.py | ForEach-Object {
+            Write-Host "--- $($_.Name)"
+            # FullName, not Name: the tests live in tests/ and this runs from the root.
+            python $_.FullName
+            if ($LASTEXITCODE -ne 0) { $failed += $_.Name }
+          }
+          if ($failed.Count -gt 0) { Write-Error "failed: $($failed -join ', ')"; exit 1 }
+
+      - name: Build the executable
+        run: pyinstaller --clean --noconfirm packaging/ai-memory.spec
+
+      # Prove the BUILT binary runs before shipping it. A bundle that imports fine on
+      # the build machine and dies on the user's is the classic PyInstaller failure,
+      # and `setup` exercises the store, the crypto and the config output in one go.
+      - name: Smoke-test the built binary
+        env:
+          AI_MEMORY_DATA_DIR: ${{ runner.temp }}\ai-memory-smoke
+        run: |
+          # The wizard prints a ready-made client config containing the API key it just
+          # minted. It is a throwaway key on a throwaway runner, but a CI log is not the
+          # place for one -- keep the output unless something goes wrong.
+          $out = "smoke-pass`nsmoke-pass`nci-agent" | .\dist\ai-memory.exe setup 2>&1
+          if ($LASTEXITCODE -ne 0) { $out | Write-Host; Write-Error "setup failed"; exit 1 }
+          Write-Host "setup created the store"
+
+          # `status` exits 1 when nothing is listening, which is CORRECT here: the smoke
+          # test starts no servers. Without this, a healthy build fails on a truthful
+          # exit code (it did, on the first run this workflow ever had).
+          .\dist\ai-memory.exe status
+          if ($LASTEXITCODE -notin 0, 1) { Write-Error "status failed"; exit 1 }
+          $global:LASTEXITCODE = 0
+          Write-Host "binary runs"
+
+      - name: Build the installer
+        run: |
+          choco install innosetup --no-progress -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows
+          path: |
+            dist/ai-memory.exe
+            dist/ai-memory-setup.exe
+          if-no-files-found: error
+
+  linux:
+    needs: version
+    # 22.04 on purpose: a PyInstaller binary needs a glibc at least as new as the one it
+    # was built against, so the OLDER build host is the one that runs on more distros
+    # (glibc 2.35 here; 24.04 would demand 2.39).
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Test
+        env:
+          AI_MEMORY_PASSPHRASE: ci-test-passphrase
+          PYTHON: python
+        run: ./run-tests.sh
+
+      - name: Build the executable
+        run: pyinstaller --clean --noconfirm packaging/ai-memory.spec
+
+      - name: Smoke-test the built binary
+        env:
+          AI_MEMORY_DATA_DIR: ${{ runner.temp }}/ai-memory-smoke
+        run: |
+          # Output kept unless it fails: it contains a (throwaway) API key.
+          if ! out="$(printf 'smoke-pass\nsmoke-pass\nci-agent\n' | ./dist/ai-memory setup 2>&1)"; then
+            echo "$out"; echo "::error::setup failed"; exit 1
+          fi
+          echo "setup created the store"
+          ./dist/ai-memory --version
+          # exit 1 = nothing running, which is the truth here (see the Windows job)
+          rc=0; ./dist/ai-memory status || rc=$?
+          [ "$rc" -le 1 ] || { echo "::error::status failed ($rc)"; exit 1; }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux
+          path: dist/ai-memory
+          if-no-files-found: error
+
+  # One job writes the checksums and publishes, so SHA256SUMS always describes exactly
+  # the files that were attached -- never a subset from a job that happened to finish.
+  release:
+    needs: [version, windows, linux]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write     # create the release and upload its files
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows
+          path: releases/v${{ needs.version.outputs.version }}/windows
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux
+          path: releases/v${{ needs.version.outputs.version }}/linux
+
+      # The same script a local release uses; it stages each binary with its marker file
+      # and README into the portable archives.
+      - name: Pack the portable archives
+        run: ./packaging/make-portable.sh "$V"
+
+      - name: Collect the assets and write SHA256SUMS
+        run: |
+          R="releases/v$V"
+          mkdir -p out
+          cp "$R/windows/ai-memory-setup.exe"                  "out/ailurus-memory-$V-windows-setup.exe"
+          cp "$R/windows/ailurus-memory-$V-windows-portable.zip" out/
+          cp "$R/linux/ailurus-memory-$V-linux-portable.tar.gz"  out/
+          (cd out && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+
+      # Release notes are this version's section of CHANGELOG.md.
+      - name: Release notes
+        run: |
+          awk -v v="$V" '
+            /^## / { if (on) exit; if (index($0, "[" v "]")) { on = 1; next } }
+            on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Ailurus Memory $V" > notes.md
+
+      # The gh CLI on the runner, not a third-party action: one less dependency with
+      # write access to the repository.
+      - name: Create the release (or add to it) and attach the files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" out/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" out/* --verify-tag \
+              --title "Ailurus Memory $V" --notes-file notes.md
+          fi
