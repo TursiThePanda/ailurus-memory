@@ -425,16 +425,18 @@ finally:
 
 print("\nADMIN WEB OK")
 
-# Stored timestamps are UTC; the admin web shows them in local time.
-_tz = os.environ.get("TZ")
-os.environ["TZ"] = "Europe/Prague"
-time.tzset()
-assert webapp.local_time("2026-10-26T20:29:50+00:00", seconds=True) == "2026-10-26 21:29:50"
-assert webapp.local_time("2026-07-01T10:00:00+00:00") == "2026-07-01 12:00", "summer time"
+# Stored timestamps are UTC; the admin web shows them in local time. Switching the
+# zone needs time.tzset(), which exists only on POSIX; Windows CI skips the check.
+if hasattr(time, "tzset"):
+    _tz = os.environ.get("TZ")
+    os.environ["TZ"] = "Europe/Prague"
+    time.tzset()
+    assert webapp.local_time("2026-10-26T20:29:50+00:00", seconds=True) == "2026-10-26 21:29:50"
+    assert webapp.local_time("2026-07-01T10:00:00+00:00") == "2026-07-01 12:00", "summer time"
+    if _tz is None:
+        os.environ.pop("TZ")
+    else:
+        os.environ["TZ"] = _tz
+    time.tzset()
 assert webapp.local_time("") == "" and webapp.local_time("garbage") == "garbage"
-if _tz is None:
-    os.environ.pop("TZ")
-else:
-    os.environ["TZ"] = _tz
-time.tzset()
 print("local time OK")
