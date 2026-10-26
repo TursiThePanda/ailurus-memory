@@ -4,7 +4,18 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
-## [1.2.0] — unreleased
+## [1.2.1] — 2026-10-26
+
+First public release, as **Ailurus Memory**, under the PolyForm Noncommercial 1.0.0
+licence. It carries everything listed under 1.2.0 below, plus: the code is one
+`ai_memory` package (`core`, `server`, `web`, `features`, `desktop`) with packaging,
+scripts and docs in their own folders; a one-page README with the full text in
+`docs/user-guide.md`; a Portainer stack in the Docker guide; Windows test fixes.
+
+## [1.2.0] — tagged, never released
+
+The tag's builds failed on Windows-only test issues before a release was made; 1.2.1 is
+the same work with those fixed.
 
 The first public release, under the outside name **Ailurus Memory**. The command, the
 data directories, the `AI_MEMORY_*` settings and the MCP server name stay `ai-memory`,
@@ -93,4 +104,4 @@ The first release for other people's machines.
   Windows installer and tray, portable mode, macOS paths; consistent backups of the
   live database.
 
-[1.2.0]: https://github.com/TursiThePanda/ailurus-memory/releases/tag/v1.2.0
+[1.2.1]: https://github.com/TursiThePanda/ailurus-memory/releases/tag/v1.2.1

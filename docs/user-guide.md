@@ -39,7 +39,7 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
 ```powershell
 # Windows PowerShell: compare the output with the line for this file in SHA256SUMS
-Get-FileHash .\ailurus-memory-1.2.0-windows-setup.exe -Algorithm SHA256
+Get-FileHash .\ailurus-memory-1.2.1-windows-setup.exe -Algorithm SHA256
 ```
 
 Every file must report `OK` (or the hashes must be the same, letter for letter). If one

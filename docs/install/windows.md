@@ -12,7 +12,7 @@ listens on your own computer and never makes an outbound connection.
 ## 1. Installing it
 
 Double-click **ailurus-memory-VERSION-windows-setup.exe** (VERSION is the release
-number, for example 1.2.0).
+number, for example 1.2.1).
 
 (Rather not install anything — to try it first, or to carry it on a USB stick? Take the
 portable zip released beside this one, the file whose name ends in
