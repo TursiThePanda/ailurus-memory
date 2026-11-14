@@ -295,6 +295,14 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         assert "CSRF" in r.text and set_as.call_count == 1, "no token, no change"
     print("autostart switch through the UI OK")
 
+    # No systemd (the container image): the section says so instead of a 500.
+    with mock.patch.object(webapp.cli, "autostart_status",
+                           return_value={"service": None, "indicator": None}):
+        page = c.get("/settings")
+        assert page.status_code == 200, page.status_code
+        assert "/settings/autostart" not in page.text and "no systemd" in page.text
+    print("settings without systemd OK")
+
     # Installation block: version, mode and every path, with the overriding variable
     # named only when it is actually set.
     from ai_memory.core.version import __version__

@@ -4,6 +4,14 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [1.4.1] — 2026-11-14
+
+### Fixed
+- **Settings was a 500 in the container image.** The Autostart section asked
+  `systemctl` whether the service starts at login, and the image has no `systemctl`, so
+  the whole Settings page failed. Without systemd the section now says that the
+  container's restart policy decides, instead of crashing.
+
 ## [1.4.0] — 2026-11-14
 
 ### Added

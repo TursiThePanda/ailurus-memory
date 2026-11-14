@@ -70,6 +70,7 @@ def main():
         _check_systemctl()
 
     _check_windows_branch()
+    _check_no_systemd()
 
     src = (Path(HERE) / "ai_memory" / "cli.py").read_text()
     check("install-service checks for a hidden indicator entry before rewriting it",
@@ -126,6 +127,21 @@ def _check_windows_branch():
                   and lnk.read_text() == "pretend shortcut")
             check("...with no stray .cmd beside it",
                   not (startup / "ai-memory-autostart.cmd").exists())
+
+def _check_no_systemd():
+    # The container image has no systemctl. Asking it anyway raised FileNotFoundError,
+    # and that turned the whole Settings page into a 500 (reported 2026-11-14).
+    with mock.patch.object(cli.sys, "platform", "linux"), \
+         mock.patch.object(cli.shutil, "which", lambda name: None), \
+         mock.patch.object(cli.subprocess, "run",
+                           side_effect=AssertionError("must not run systemctl")):
+        try:
+            status = cli.autostart_status()
+        except Exception as e:
+            status = repr(e)
+    check("without systemd autostart is 'not applicable', not a crash",
+          status == {"service": None, "indicator": None}, str(status))
+
 
 if __name__ == "__main__":
     sys.exit(main())

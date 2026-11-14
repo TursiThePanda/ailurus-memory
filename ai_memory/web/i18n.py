@@ -75,6 +75,7 @@ CS = {
     "Without this the memory stays locked until you start it yourself.": "Bez toho z\u016fstane pam\u011b\u0165 zam\u010den\u00e1, dokud ji s\u00e1m nespust\u00ed\u0161.",
     "Show the tray icon when I log in": "Zobrazit ikonu v panelu po p\u0159ihl\u00e1\u0161en\u00ed",
     "The icon only reports the state; it never starts the memory on its own.": "Ikona jen ukazuje stav; pam\u011b\u0165 sama nikdy nespust\u00ed.",
+    "Not managed from here: there is no systemd on this machine. In a container the restart policy decides whether the memory starts.": "Tady se nenastavuje: na tomto stroji není systemd. V kontejneru o spuštění paměti rozhoduje jeho restart policy.",
     "Download a copy": "St\u00e1hnout kopii",
     "Last export": "Posledn\u00ed export",
     "Last export failed": "Posledn\u00ed export selhal",

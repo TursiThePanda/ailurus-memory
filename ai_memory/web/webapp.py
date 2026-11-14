@@ -1370,6 +1370,11 @@ def _autostart_section(request: Request) -> str:
     who prefers to start the memory by hand still wants the icon -- greyed out, with
     Start in its menu. On Windows the tray IS the supervisor, so there is one switch."""
     status = cli.autostart_status()
+    if status["service"] is None:
+        return (f"<h3>{esc(t('Autostart'))}</h3>"
+                f"<p class=muted>{esc(t('Not managed from here: there is no systemd on '
+                                        'this machine. In a container the restart policy '
+                                        'decides whether the memory starts.'))}</p>")
     rows = [("service", t("Start the memory when I log in"),
              t("Without this the memory stays locked until you start it yourself."))]
     if status["indicator"] is not None:

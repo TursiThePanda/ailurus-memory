@@ -660,6 +660,10 @@ def autostart_status() -> dict:
         lnk, cmd = _win_startup_entries()
         on = lnk.exists() or cmd.exists()
         return {"service": on, "indicator": None}
+    if shutil.which("systemctl") is None:
+        # No systemd here -- the container image above all, where the restart policy
+        # decides what starts, and there is no desktop for a tray icon either.
+        return {"service": None, "indicator": None}
     r = subprocess.run(["systemctl", "--user", "is-enabled", "ai-memory.service"],
                        capture_output=True, text=True)
     return {"service": r.stdout.strip() == "enabled",
