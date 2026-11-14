@@ -13,7 +13,7 @@ check, off by default, is the only exception).
 ## 1. Installing it
 
 Double-click **ailurus-memory-VERSION-windows-setup.exe** (VERSION is the release
-number, for example 1.4.1).
+number, for example 1.5.0).
 
 (Rather not install anything — to try it first, or to carry it on a USB stick? Take the
 portable zip released beside this one, the file whose name ends in

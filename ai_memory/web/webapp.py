@@ -40,6 +40,7 @@ from ai_memory.core.version import __version__
 # import happens inside _serve(), not at module level.
 from ai_memory import cli
 from ai_memory.features import export
+from ai_memory.features import restore
 from ai_memory.features import instructions as ai_instructions
 from ai_memory.core import keystore
 from ai_memory.features import lint
@@ -164,6 +165,13 @@ pre{white-space:pre-wrap;background:var(--surface2);border:1px solid var(--borde
          padding:.8rem 1rem;box-shadow:var(--shadow)}
 .filters label{color:var(--muted);font-size:.88rem}
 .inline{display:inline;margin-right:.2rem}
+dialog{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
+  color:var(--fg);box-shadow:var(--shadow);padding:1.2rem 1.4rem;width:min(36rem,calc(100% - 2rem))}
+dialog::backdrop{background:rgba(20,10,5,.5)}
+dialog h3{margin-top:0}
+dialog input:not([type=checkbox]):not([type=file]){width:100%}
+dialog .actions{display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;flex-wrap:wrap}
+dialog .actions form{margin:0}
 .inline input{width:9rem}
 a.tag{display:inline-block;background:var(--accent-soft);color:var(--accent);
       border-radius:999px;padding:.06rem .6rem;margin:.1rem .2rem .1rem 0;
@@ -1251,6 +1259,10 @@ async def check_updates(request: Request):
 async def settings_page(request: Request):
     if not authed(request):
         return RedirectResponse("/login", 303)
+    return _settings_response(request)
+
+
+def _settings_response(request: Request, modal: str = "") -> HTMLResponse:
     cfg = export.config(STORE)
     remembered = keystore.is_remembered()
     can_remember, backend = keystore.available()
@@ -1275,6 +1287,7 @@ async def settings_page(request: Request):
 
     body = (
         f"<h2>{esc(t('Settings'))}</h2>"
+        f"{_restore_flash(request)}"
 
         f"<h3>{esc(t('Scheduled export'))}</h3>"
         f"<p class=muted>{esc(export_hint)}</p>"
@@ -1316,6 +1329,7 @@ async def settings_page(request: Request):
         f"<a href='/settings/export/download'><button type=button>"
         f"{esc(t('Download a copy'))}</button></a>"
 
+        f"{_restore_section(request)}"
         f"{_updates_section(request)}"
         f"<h3>{esc(t('Master passphrase'))}</h3>")
 
@@ -1343,7 +1357,179 @@ async def settings_page(request: Request):
     body += _tls_section(request)
     body += _autostart_section(request)
     body += _installation_section()
-    return layout(t("Settings"), cards(body), banner=backup_banner())
+    # Dialogs go OUTSIDE cards(): it splits the page on every <h3>, a dialog's included.
+    # The upload dialog exists exactly once -- closed, or open with an error.
+    if "id=restore-upload" not in modal:
+        modal = _restore_upload_dialog(request, error="", open_=False) + modal
+    return layout(t("Settings"), cards(body) + modal, banner=backup_banner())
+
+
+# ---------- import a backup (restore) ----------
+# Two steps in a modal: upload + passphrases -> the file is checked and re-keyed on a
+# staged copy and its content is shown; only the second click replaces the memory.
+# Nothing secret is kept between the steps: the session holds the staged file's random
+# token, and the staged file is already re-wrapped to this memory's passphrase.
+
+def _restore_section(request: Request) -> str:
+    hint = t("Puts a backup or an export back: its content REPLACES this memory. "
+             "The current memory is saved first, so the import can be undone the "
+             "same way.")
+    return (f"<h3 id=restore>{esc(t('Import a backup'))}</h3>"
+            f"<p class=muted>{esc(hint)}</p>"
+            f"<button type=button onclick=\"document.getElementById('restore-upload')"
+            f".showModal()\">{esc(t('Import a backup…'))}</button>")
+
+
+def _restore_upload_dialog(request: Request, error: str, open_: bool) -> str:
+    err = f"<p class=danger>{esc(error)}</p>" if error else ""
+    mb = restore.MAX_BYTES // (1024 * 1024)
+    return (
+        f"<dialog id=restore-upload>"
+        f"<h3>{esc(t('Import a backup'))}</h3>{err}"
+        f"<form method=post action='/settings/restore' enctype=multipart/form-data>"
+        f"{csrf_field(request)}"
+        f"<p>{esc(t('Backup or export file'))}<br>"
+        f"<input type=file name=file required accept='.db,.sqlite,application/octet-stream'>"
+        f"<br><span class=muted>{esc(t('At most'))} {mb} MB.</span></p>"
+        f"<p>{esc(t('Passphrase of the backup'))}<br>"
+        f"<input type=password name=file_passphrase autocomplete=off>"
+        f"<br><span class=muted>{esc(t('The passphrase the memory had when the backup '
+                                       'was made. Leave empty if it is the same as now.'))}"
+        f"</span></p>"
+        f"<p>{esc(t('Passphrase of this memory'))}<br>"
+        f"<input type=password name=passphrase required autocomplete=current-password>"
+        f"<br><span class=muted>{esc(t('After the import the memory keeps opening with '
+                                       'this one.'))}</span></p>"
+        f"<div class=actions><button type=button class=ghost "
+        f"onclick=\"this.closest('dialog').close()\">{esc(t('Cancel'))}</button>"
+        f"<button type=submit>{esc(t('Check the file'))}</button></div>"
+        f"</form></dialog>"
+        + ("<script>document.getElementById('restore-upload').showModal()</script>"
+           if open_ else ""))
+
+
+def _restore_confirm_dialog(request: Request, token: str, filename: str,
+                            info: dict) -> str:
+    agents = ", ".join(info["agents"]) or "—"
+    spaces = ", ".join(info["namespaces"]) or "—"
+    warn = t("Everything in this memory is replaced by the file: records, history, "
+             "attachments, agents and their API keys, AI instructions. Agents whose keys "
+             "are not in the file stop working. Network, HTTPS and export settings stay "
+             "as they are on this machine.")
+    return (
+        f"<dialog id=restore-confirm>"
+        f"<h3>{esc(t('Import a backup'))}</h3>"
+        f"<p class=ok>{esc(t('The file is a valid backup and the passphrase opens it.'))}</p>"
+        f"<table>"
+        f"<tr><td>{esc(t('File'))}</td><td><code>{esc(filename)}</code></td></tr>"
+        f"<tr><td>{esc(t('Records'))}</td><td>{info['records']}</td></tr>"
+        f"<tr><td>{esc(t('Attachments'))}</td><td>{info['attachments']}</td></tr>"
+        f"<tr><td>{esc(t('Namespaces'))}</td><td>{esc(spaces)}</td></tr>"
+        f"<tr><td>{esc(t('Agents'))}</td><td>{esc(agents)}</td></tr>"
+        f"<tr><td>{esc(t('Last change'))}</td><td>{esc(local_time(info['newest']))}</td></tr>"
+        f"</table>"
+        f"<p class=danger>{esc(warn)}</p>"
+        f"<div class=actions>"
+        f"<form method=post action='/settings/restore/cancel'>{csrf_field(request)}"
+        f"<button type=submit class=ghost>{esc(t('Cancel'))}</button></form>"
+        f"<form method=post action='/settings/restore/apply'>{csrf_field(request)}"
+        f"<input type=hidden name=token value='{esc(token)}'>"
+        f"<button type=submit class=danger>{esc(t('Replace this memory'))}</button></form>"
+        f"</div></dialog>"
+        f"<script>document.getElementById('restore-confirm').showModal()</script>")
+
+
+def _restore_flash(request: Request) -> str:
+    done = request.session.pop("restore_done", None)
+    if not done:
+        return ""
+    return (f"<p class=ok>{esc(t('Imported'))}: {done['records']} {esc(t('records'))}. "
+            f"{esc(t('The previous memory was saved to'))} <code>{esc(done['snapshot'])}</code>"
+            f"</p>")
+
+
+async def restore_upload(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    try:
+        declared = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        declared = 0
+    if declared > restore.MAX_BYTES + 1024 * 1024:
+        return _settings_response(request, _restore_upload_dialog(
+            request, t("The file is too large."), open_=True))
+    form = await request.form(max_files=1, max_fields=10)
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/settings")
+    upload = form.get("file")
+    if not hasattr(upload, "read"):
+        return _settings_response(request, _restore_upload_dialog(
+            request, t("Choose a file."), open_=True))
+    old_token = request.session.pop("restore_token", "")
+    restore.take(old_token)
+    restore.discard(restore.stage_path(old_token))
+    token, staged = restore.new_stage()
+    size = 0
+    try:
+        with open(staged, "wb") as out:
+            while chunk := await upload.read(1024 * 1024):
+                size += len(chunk)
+                if size > restore.MAX_BYTES:
+                    raise restore.RestoreError("The file is too large.")
+                out.write(chunk)
+        info, dek = await run_in_threadpool(
+            restore.prepare, staged, form.get("file_passphrase") or "",
+            form.get("passphrase") or "", STORE)
+    except restore.RestoreError as e:
+        restore.discard(staged)
+        return _settings_response(request, _restore_upload_dialog(
+            request, t(str(e)), open_=True))
+    except Exception as e:
+        restore.discard(staged)
+        return _settings_response(request, _restore_upload_dialog(
+            request, f"{t('The file could not be read')}: {e}", open_=True))
+    restore.hold(token, dek)
+    request.session["restore_token"] = token
+    return _settings_response(request, _restore_confirm_dialog(
+        request, token, upload.filename or "", info))
+
+
+async def restore_apply(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/settings")
+    token = request.session.pop("restore_token", "")
+    if not token or not secrets.compare_digest(form.get("token", ""), token):
+        # The pending import is consumed either way; do not leave its file behind.
+        restore.take(token)
+        restore.discard(restore.stage_path(token))
+        return _err(t("This import is no longer pending; start it again."), "/settings#restore")
+    staged = restore.stage_path(token)
+    dek = restore.take(token)
+    if staged is None or dek is None:
+        restore.discard(staged)
+        return _err(t("This import is no longer pending; start it again."), "/settings#restore")
+    try:
+        result = await run_in_threadpool(restore.apply, STORE, staged, dek)
+    except restore.RestoreError as e:
+        restore.discard(staged)
+        return _err(t(str(e)), "/settings#restore")
+    request.session["restore_done"] = result
+    return RedirectResponse("/settings", 303)
+
+
+async def restore_cancel(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/settings")
+    token = request.session.pop("restore_token", "")
+    restore.take(token)
+    restore.discard(restore.stage_path(token))
+    return RedirectResponse("/settings#restore", 303)
 
 
 def _installation_section() -> str:
@@ -1812,6 +1998,9 @@ routes = [
     Route("/settings/autostart", save_autostart, methods=["POST"]),
     Route("/settings/updates", save_updates, methods=["POST"]),
     Route("/settings/updates/check", check_updates, methods=["POST"]),
+    Route("/settings/restore", restore_upload, methods=["POST"]),
+    Route("/settings/restore/apply", restore_apply, methods=["POST"]),
+    Route("/settings/restore/cancel", restore_cancel, methods=["POST"]),
 ]
 
 # Behind TLS (our own, or a trusted proxy's) the session cookie must never travel over

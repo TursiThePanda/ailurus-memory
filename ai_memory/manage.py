@@ -13,6 +13,7 @@ Examples:
     ai-memory-manage tag list
     ai-memory-manage tag rename konvence convention
     ai-memory-manage tag delete obsolete
+    ai-memory-manage restore memory-20261114-0300.db   # with the memory stopped
 """
 import argparse
 import os
@@ -32,6 +33,33 @@ def parse_perms(pairs):
         k, _, v = p.partition("=")
         out[k] = v
     return out
+
+
+def _restore(s, args, current):
+    import getpass
+    from pathlib import Path
+
+    from ai_memory.features import restore
+    file_pass = getpass.getpass("passphrase of the backup (Enter = the same as now): ")
+    try:
+        _token, staged = restore.stage_from_file(Path(args.file))
+        try:
+            info, dek = restore.prepare(staged, file_pass, current, s)
+            print(f"{args.file}: {info['records']} records, {info['attachments']} "
+                  f"attachments, last change {info['newest'] or '?'}")
+            print(f"  namespaces: {', '.join(info['namespaces']) or '-'}")
+            print(f"  agents:     {', '.join(info['agents']) or '-'}")
+            print("It REPLACES this memory (agents and API keys included); network and "
+                  "export settings stay.")
+            if not args.yes and input("type 'replace' to go on: ").strip() != "replace":
+                raise SystemExit("nothing changed.")
+            result = restore.apply(s, staged, dek)
+        finally:
+            restore.discard(staged)
+    except restore.RestoreError as e:
+        raise SystemExit(f"ERROR: {e}")
+    print(f"restored {result['records']} records; the previous memory is in "
+          f"{result['snapshot']}")
 
 
 def main():
@@ -61,15 +89,31 @@ def main():
     tsub.add_parser("list")
     t = tsub.add_parser("rename"); t.add_argument("old"); t.add_argument("new")
     t = tsub.add_parser("delete"); t.add_argument("tag")
+    p = sub.add_parser("restore", help="replace this memory with a backup or export file "
+                                       "(the memory must be stopped; the admin web can "
+                                       "do it while running)")
+    p.add_argument("file")
+    p.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     args = ap.parse_args()
+
+    if args.cmd == "restore":
+        # A running server holds the memory open with ITS key; replacing the data under
+        # it would leave it decrypting with the wrong one.
+        from ai_memory import cli
+        if cli.port_up(int(cli.runtime().get("port", cli.PORT))):
+            raise SystemExit("the memory is running -- stop it first (ai-memory stop), "
+                             "or use Settings -> Import a backup in the admin web")
 
     os.makedirs(os.path.dirname(DB), exist_ok=True)
     try:
-        s = SecureStore(DB, get_passphrase())
+        master = get_passphrase()
+        s = SecureStore(DB, master)
     except WrongPassphrase as e:
         raise SystemExit(f"ERROR: {e}")
 
-    if args.cmd == "add-agent":
+    if args.cmd == "restore":
+        _restore(s, args, master)
+    elif args.cmd == "add-agent":
         key = s.add_agent(args.name, parse_perms(args.perm))
         print(f"agent '{args.name}' created.")
         print(f"API KEY (shown ONLY now, save it): {key}")

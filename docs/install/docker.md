@@ -310,9 +310,13 @@ or the backups are useless.
 
   It takes a consistent snapshot of the live database and checks it before it publishes
   it.
-- To restore, stop the container, put the backup file into the volume as `memory.db`,
-  start it again and unlock it with the passphrase that was in use when the backup was
-  made.
+- To restore, use *Settings* → **Import a backup…** in the admin web (since 1.5.0): it
+  takes the file through the browser, asks for its passphrase and replaces the memory
+  while the container runs, keeping the current passphrase — so `AI_MEMORY_PASSPHRASE`
+  or the secret need no change. See *Importing a backup* in the user guide.
+  The manual way still works: stop the container, put the backup file into the volume as
+  `memory.db`, start it again and unlock it with the passphrase that was in use when the
+  backup was made.
 
 ---
 
@@ -328,7 +332,7 @@ the memory is locked again, unless you use the passphrase secret. Agents reconne
 themselves once it is unlocked. Their keys live in the database and survive any
 restart. Read [CHANGELOG.md](../../CHANGELOG.md) before you jump a minor version.
 
-Prefer pinning a version (`ghcr.io/tursithepanda/ailurus-memory:1.4.1`) over `latest`
+Prefer pinning a version (`ghcr.io/tursithepanda/ailurus-memory:1.5.0`) over `latest`
 on a server you do not watch.
 
 ---
@@ -344,12 +348,12 @@ does not find ("no signatures found"). Without installing it:
 `docker run --rm gcr.io/projectsigstore/cosign:v3.0.6 verify ...`
 
 ```bash
-cosign verify ghcr.io/tursithepanda/ailurus-memory:1.4.1 \
-  --certificate-identity "https://github.com/TursiThePanda/ailurus-memory/.github/workflows/build-docker.yml@refs/tags/v1.4.1" \
+cosign verify ghcr.io/tursithepanda/ailurus-memory:1.5.0 \
+  --certificate-identity "https://github.com/TursiThePanda/ailurus-memory/.github/workflows/build-docker.yml@refs/tags/v1.5.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
 
-Replace both `1.4.1` with the version you pull. To accept any release tag of this
+Replace both `1.5.0` with the version you pull. To accept any release tag of this
 repository instead of one exact tag:
 
 ```bash
@@ -361,8 +365,8 @@ cosign verify ghcr.io/tursithepanda/ailurus-memory:latest \
 The image also carries an SBOM and SLSA build provenance:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.4.1 --format '{{ json .SBOM }}'
-docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.4.1 --format '{{ json .Provenance }}'
+docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.5.0 --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/tursithepanda/ailurus-memory:1.5.0 --format '{{ json .Provenance }}'
 ```
 
 ---

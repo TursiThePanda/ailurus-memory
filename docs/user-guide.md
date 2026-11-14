@@ -39,7 +39,7 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
 ```powershell
 # Windows PowerShell: compare the output with the line for this file in SHA256SUMS
-Get-FileHash .\ailurus-memory-1.4.1-windows-setup.exe -Algorithm SHA256
+Get-FileHash .\ailurus-memory-1.5.0-windows-setup.exe -Algorithm SHA256
 ```
 
 Every file must report `OK` (or the hashes must be the same, letter for letter). If one
@@ -391,6 +391,36 @@ export is configured — warning about a backup nobody asked for is how a real w
 ignored later.
 
 **The passphrase is not in the backup.** That is the design — the file is unreadable without it — but it means a lost passphrase makes every copy permanently useless. Keep it somewhere that is not this machine.
+
+### Importing a backup (since 1.5.0)
+
+*Settings* → **Import a backup…** opens a dialog: choose the file (a scheduled export, a
+copy from `backup.py`, or `memory.db` from another installation), type the passphrase that
+memory had when the copy was made (leave it empty if it is the same as now) and this
+memory's passphrase. The file is checked on a staged copy — integrity, the wrapped key,
+the passphrase — and the dialog shows what is inside: records, attachments, namespaces,
+agents, last change. Nothing has changed at that point. **Replace this memory** does it.
+
+- **It replaces, it does not merge.** Records, history, attachments, vectors, tags,
+  agents with their API keys and the AI instructions all come from the file. Agents whose
+  keys exist only in the current memory stop working.
+- **The passphrase stays the same.** The file's data key is re-wrapped with this memory's
+  passphrase, so a Docker secret or a passphrase remembered in the OS credential store
+  keeps working after the import.
+- **Network, HTTPS and export settings stay as they are on this machine** — they describe
+  the machine, and a file from another one could lock the admin web out.
+- **The current memory is saved first**, to `backups/before-restore-<time>.db` in the data
+  folder. That file can be imported the same way to undo the import.
+- **No restart.** The running server switches to the imported memory at once; files up to
+  512 MB.
+
+Without the admin web, with the memory stopped:
+
+```bash
+ai-memory stop
+ai-memory-manage restore /path/to/memory-20261114-0300.db
+ai-memory start
+```
 
 ## Semantic layer (optional)
 Duplicate detection and search-by-meaning run a small embedding model

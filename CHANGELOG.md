@@ -4,6 +4,17 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [1.5.0] — 2026-11-14
+
+### Added
+- **Import a backup from the admin web.** *Settings* → *Import a backup…* opens a dialog:
+  choose a backup or export, type its passphrase, check what is inside, confirm. The
+  file's content replaces the memory while it runs — no restart, no copying `memory.db`
+  by hand. The passphrase stays the current one, network/HTTPS/export settings stay this
+  machine's, and the memory as it was is saved to `backups/before-restore-<time>.db`
+  first. The same from the command line: `ai-memory-manage restore <file>` (with the
+  memory stopped).
+
 ## [1.4.1] — 2026-11-14
 
 ### Fixed
