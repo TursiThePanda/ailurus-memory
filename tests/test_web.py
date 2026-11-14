@@ -387,6 +387,35 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         i18n_mod.set_lang("en")
     print("AI instructions page OK")
 
+    # Update check (1.4.0): off by default, no banner; turning it on checks once (the
+    # network is faked), the banner appears on every page; off again, the banner goes.
+    from ai_memory.features import updates as upd
+    from ai_memory.core.version import __version__ as _v
+    _maj, _min, _ = upd.parse(_v)
+    _newer = f"{_maj}.{_min + 1}.0"
+    with mock.patch.object(webapp.cli, "autostart_status",
+                           return_value={"service": False, "indicator": None}), \
+         mock.patch.object(upd, "fetch_latest", return_value=_newer) as fetched:
+        page = c.get("/settings").text
+        assert "Update check" in page and "Never checked" in page
+        assert "A new version is available" not in c.get("/").text
+        r = c.post("/settings/updates", data={"enabled": "1", "tell_agents": "1"})
+        assert "CSRF" in r.text and not upd.config(s)["enabled"], "no token, no change"
+        r = c.post("/settings/updates", follow_redirects=False,
+                   data={"csrf": csrf_of(page), "enabled": "1", "tell_agents": "1"})
+        assert r.status_code == 303 and fetched.call_count == 1, "turning it on checks once"
+        home = c.get("/").text
+        assert "A new version is available" in home and _newer in home
+        assert f"/releases/tag/v{_newer}" in home
+        assert "a newer version is available" in c.get("/settings").text
+        prev_agent = s.list_agents()[0]["name"]
+        assert "UPDATE AVAILABLE" in c.get(f"/instructions/preview?agent={prev_agent}").text
+        r = c.post("/settings/updates", follow_redirects=False,
+                   data={"csrf": csrf_of(c.get("/settings").text)})
+        assert not upd.config(s)["enabled"]
+        assert "A new version is available" not in c.get("/").text, "off = silent"
+    print("update check OK")
+
     # logout
     assert c.get("/logout").status_code == 405, "logout is POST-only"
     r = c.post("/logout", follow_redirects=False)

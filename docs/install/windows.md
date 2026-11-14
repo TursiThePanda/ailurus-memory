@@ -5,14 +5,15 @@ A private, encrypted memory that several AI assistants can share.
 Instead of explaining your setup, your projects and your preferences again in every new
 chat, the assistant reads and writes a memory that lives on **your** machine. Everything
 in it is encrypted with a passphrase only you know. Nothing is sent anywhere: the program
-listens on your own computer and never makes an outbound connection.
+listens on your own computer and makes no outbound connection (the optional update
+check, off by default, is the only exception).
 
 ---
 
 ## 1. Installing it
 
 Double-click **ailurus-memory-VERSION-windows-setup.exe** (VERSION is the release
-number, for example 1.3.0).
+number, for example 1.4.0).
 
 (Rather not install anything — to try it first, or to carry it on a USB stick? Take the
 portable zip released beside this one, the file whose name ends in

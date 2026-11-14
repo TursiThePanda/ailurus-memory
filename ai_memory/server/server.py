@@ -24,6 +24,7 @@ from ai_memory.features import instructions as ai_instructions
 from ai_memory.features import lint
 from ai_memory.server import netconf
 from ai_memory.features import sections
+from ai_memory.features import updates
 from ai_memory.core import paths
 from ai_memory.core.store import SecureStore
 from ai_memory.core.unlock import get_passphrase
@@ -76,6 +77,12 @@ def _build_instructions() -> str:
             base = ai_instructions.for_agent(STORE, agent)
         except Exception:  # a broken setting must not cost the agent its protocol
             base = INSTRUCTIONS
+        try:  # off unless the owner enabled the update check (features/updates.py)
+            notice = updates.agent_notice(STORE)
+        except Exception:
+            notice = ""
+        if notice:
+            base = f"{base}\n\n{notice}"
         items = _readable_for(agent)
         if not items:
             return base + "\n\nINDEX\n(the store is still empty)"

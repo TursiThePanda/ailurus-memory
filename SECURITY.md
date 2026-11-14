@@ -89,9 +89,13 @@ Do not expose the admin web to the internet. If you must reach it remotely, use 
   bridge gateway.
 - Behind a reverse proxy, list the proxy under trusted proxies. Forwarded headers from
   anyone else are ignored, so a client cannot pick its own address.
-- The program makes **no outbound connections at runtime**. The only network download is
-  the embedding model, and only when you run `ai-memory-manage embed --setup` yourself. The
-  container image already contains the model.
+- The program makes **no outbound connections at runtime** unless you turn on the update
+  check (Settings → Update check, off by default). With it on, the server asks GitHub's
+  public API once a day for the latest release version, with a generic User-Agent and no
+  data about the instance; only a version number matching `x.y.z` is kept from the answer,
+  and the release link shown to you and to the agents is built locally from it. The only
+  network download is the embedding model, and only when you run
+  `ai-memory-manage embed --setup` yourself. The container image already contains the model.
 
 ### Supply chain
 

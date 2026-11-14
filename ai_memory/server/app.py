@@ -153,6 +153,7 @@ def main() -> None:
     import uvicorn
 
     from ai_memory.features import export
+    from ai_memory.features import updates
     from ai_memory.server import server
     from ai_memory.server import tls
     from ai_memory.core.store import SecureStore
@@ -167,6 +168,8 @@ def main() -> None:
     # The export schedule has exactly one owner, or two processes race to write the
     # same destination. With one process there is only one candidate.
     export.Scheduler(store, db).start()
+    # Off unless enabled in the admin web; the only outbound connection (features/updates.py).
+    updates.Scheduler(store).start()
 
     cfg = netconf.config(store)
     names = list(cfg["allowed_hosts"])

@@ -39,7 +39,7 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
 ```powershell
 # Windows PowerShell: compare the output with the line for this file in SHA256SUMS
-Get-FileHash .\ailurus-memory-1.3.0-windows-setup.exe -Algorithm SHA256
+Get-FileHash .\ailurus-memory-1.4.0-windows-setup.exe -Algorithm SHA256
 ```
 
 Every file must report `OK` (or the hashes must be the same, letter for letter). If one
@@ -214,6 +214,15 @@ Everything can be edited, the SECURITY paragraph included. The page warns while 
 Below the general text, each agent can get an **addendum**, appended under `FOR YOU (<agent name>)` for that agent only (for example simpler wording for a small local model, or a rule for one machine). **Preview** shows exactly what a chosen agent receives. Limits: 8 000 characters for the general text, 2 000 per addendum. The index is always appended by the server and is not part of the editable text.
 
 The settings are stored encrypted in the database, so they are part of every backup and come back with a restore. A change applies to each client's **next** connection, with no restart; a session that is already connected keeps what it received. Deleting an agent deletes its addendum.
+
+### Update check (since 1.4.0)
+**Off by default.** Settings → *Update check* → *Check for new versions* makes the server ask GitHub's public API (`api.github.com/repos/TursiThePanda/ailurus-memory/releases/latest`) once a day which version is the latest; *Check now* asks immediately. It is the only outbound connection Ailurus Memory opens, it sends nothing but a generic `ailurus-memory/<version>` User-Agent, and nothing is downloaded or installed.
+
+When a newer version exists:
+- the admin web shows a banner on every page, with a link to the release notes;
+- with *Tell the AI agents too* (on by default once the check is on), every agent's instructions get an `UPDATE AVAILABLE` paragraph asking it to mention the new version to you once per session. Like the index, it is added by the server after the editable text.
+
+Only a version number of the form `x.y.z` is taken from GitHub's answer; the release link is built locally, so a spoofed answer cannot put text into the agents' instructions. Turning the check off silences both the banner and the agents at once. A fork can point the check elsewhere with `AI_MEMORY_UPDATE_REPO=owner/repo`.
 
 ## Network, access and HTTPS
 
@@ -411,7 +420,7 @@ ai-memory-manage embed --overlaps  # records that cover the same ground (default
 ai-memory-manage embed             # status: model present? how much is indexed?
 ```
 
-The download is a deliberate, user-run step. **Nothing else in this project ever opens an outbound connection** — the server only listens on `127.0.0.1`, and with the model absent the semantic tools return an instruction instead of failing, while everything else keeps working.
+The download is a deliberate, user-run step. **Nothing else in this project opens an outbound connection, except the update check if you turn it on** (see *Update check*) — the server only listens on `127.0.0.1`, and with the model absent the semantic tools return an instruction instead of failing, while everything else keeps working.
 
 Two design points worth knowing:
 - **Vectors are encrypted like the payloads.** An embedding is partially invertible, so a plaintext vector table beside an encrypted store would quietly undo the encryption. Per-record `share` restrictions reach the vectors too — a hidden record must not reappear as a similarity hit.
@@ -431,6 +440,7 @@ python tests/test_semantic.py # embeddings: encrypted vectors, incremental index
 python tests/test_download.py # model download: resume, a server ignoring Range, a dead server
 python tests/test_index.py   # the handshake index, ACL on the index and the audit, delete/move/audit
 python tests/test_instructions.py   # editable AI instructions: defaults, limits, per-agent addendum, live change
+python tests/test_updates.py        # update check: off by default, banner, agent notice, hostile answers
 python tests/test_http.py    # e2e over HTTP: 401 without a key, ACL enforced
 python tests/test_web.py     # the admin web: login, permission matrix, filtering, editing, tag admin, CSRF
 ```

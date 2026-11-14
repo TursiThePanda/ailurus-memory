@@ -43,6 +43,7 @@ from ai_memory.features import export
 from ai_memory.features import instructions as ai_instructions
 from ai_memory.core import keystore
 from ai_memory.features import lint
+from ai_memory.features import updates
 from ai_memory.server import netconf
 from ai_memory.web.i18n import LANGS, get_lang, set_lang, t
 from ai_memory.core import paths
@@ -283,7 +284,7 @@ def layout(title: str, body: str, banner: str = "") -> HTMLResponse:
 <meta name=viewport content="width=device-width,initial-scale=1"><title>{esc(title)} – {APP_NAME}</title>
 {f'<link rel=icon href="{fav}">' if fav else ''}
 <style>{CSS}</style></head><body>
-{head}<main>{banner}{body}</main></body></html>""")
+{head}<main>{update_banner() if head else ""}{banner}{body}</main></body></html>""")
 
 
 def cards(body: str) -> str:
@@ -337,6 +338,21 @@ def backup_banner() -> str:
                    "backup.")
     return (f"<p class=banner><strong>{esc(t(msg) if st['state'] == 'never' else esc_msg(msg))}"
             f"</strong> {esc(detail)} <a href='/settings'>{esc(t('Settings'))}</a></p>")
+
+
+def update_banner() -> str:
+    """A newer release, if the owner turned the update check on. Silent otherwise, and
+    never allowed to break the page it sits on."""
+    try:
+        latest = updates.available(STORE) if STORE is not None else None
+    except Exception:
+        return ""
+    if not latest:
+        return ""
+    return (f"<p class=banner><strong>{esc(t('A new version is available'))}: "
+            f"Ailurus Memory {esc(latest)}</strong> ({esc(t('this one runs'))} {esc(__version__)}). "
+            f"<a href='{esc(updates.release_url(latest))}' rel=noopener target=_blank>"
+            f"{esc(t('Release notes'))}</a> · <a href='/settings#updates'>{esc(t('Settings'))}</a></p>")
 
 
 def esc_msg(msg: str) -> str:
@@ -1174,6 +1190,64 @@ async def memory_save(request: Request):
 
 
 
+def _updates_section(request: Request) -> str:
+    cfg = updates.config(STORE)
+    hint = t("Off by default: with it on, this server asks GitHub once a day which "
+             "version is the latest -- the only connection Ailurus Memory ever opens to "
+             "the outside. Nothing is downloaded or installed; you are only told.")
+    agents_hint = t("The agents then mention a new version once per session, so you hear "
+                    "about it from the AI you are already talking to.")
+    if cfg.get("last_error"):
+        status = (f"<p class=danger>{esc(t('The last check failed'))}"
+                  f" ({esc(local_time(cfg.get('last_check') or ''))}): {esc(cfg['last_error'])}</p>")
+    elif cfg.get("last_check"):
+        latest = cfg.get("latest") or "?"
+        state = (t("a newer version is available") if updates.newer(cfg.get("latest"))
+                 else t("you are up to date"))
+        status = (f"<p class=muted>{esc(t('Last check'))}: {esc(local_time(cfg['last_check']))}"
+                  f" — {esc(t('latest release'))} {esc(latest)}, {esc(t('this one runs'))} "
+                  f"{esc(__version__)}: {esc(state)}.</p>")
+    else:
+        status = f"<p class=muted>{esc(t('Never checked.'))}</p>"
+    return (
+        f"<h3 id=updates>{esc(t('Update check'))}</h3>"
+        f"<p class=muted>{esc(hint)}</p>{status}"
+        f"<form method=post action='/settings/updates'>{csrf_field(request)}"
+        f"<p><label><input type=checkbox name=enabled value=1"
+        f"{' checked' if cfg['enabled'] else ''}> {esc(t('Check for new versions'))}</label><br>"
+        f"<label><input type=checkbox name=tell_agents value=1"
+        f"{' checked' if cfg['tell_agents'] else ''}> "
+        f"{esc(t('Tell the AI agents too (added to their instructions)'))}</label><br>"
+        f"<span class=muted>{esc(agents_hint)}</span></p>"
+        f"<button type=submit>{esc(t('Save'))}</button></form>"
+        + (f"<form method=post action='/settings/updates/check' class=inline>{csrf_field(request)}"
+           f"<button type=submit>{esc(t('Check now'))}</button></form>" if cfg["enabled"] else ""))
+
+
+async def save_updates(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/settings")
+    enabled = bool(form.get("enabled"))
+    updates.save(STORE, enabled=enabled, tell_agents=bool(form.get("tell_agents")))
+    if enabled and updates.due(updates.config(STORE)):
+        await run_in_threadpool(updates.check_now, STORE)
+    return RedirectResponse("/settings#updates", 303)
+
+
+async def check_updates(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/settings")
+    if updates.config(STORE)["enabled"]:
+        await run_in_threadpool(updates.check_now, STORE)
+    return RedirectResponse("/settings#updates", 303)
+
+
 async def settings_page(request: Request):
     if not authed(request):
         return RedirectResponse("/login", 303)
@@ -1242,6 +1316,7 @@ async def settings_page(request: Request):
         f"<a href='/settings/export/download'><button type=button>"
         f"{esc(t('Download a copy'))}</button></a>"
 
+        f"{_updates_section(request)}"
         f"<h3>{esc(t('Master passphrase'))}</h3>")
 
     if not can_remember:
@@ -1644,6 +1719,9 @@ async def instructions_preview(request: Request):
     if agent not in {a["name"] for a in STORE.list_agents()}:
         return _err(t("No such agent."), "/instructions")
     text = ai_instructions.for_agent(STORE, agent)
+    notice = updates.agent_notice(STORE)
+    if notice:
+        text = f"{text}\n\n{notice}"
     body = (f"<h2>{esc(t('AI instructions'))}: {esc(agent)}</h2>"
             f"<p class=muted>{esc(t('Followed by the index of the records this agent may read.'))}</p>"
             f"<textarea class=editor rows=32 readonly>{esc(text)}</textarea>"
@@ -1727,6 +1805,8 @@ routes = [
     Route("/settings/tls/upload", upload_tls, methods=["POST"]),
     Route("/settings/tls/cert", download_cert),
     Route("/settings/autostart", save_autostart, methods=["POST"]),
+    Route("/settings/updates", save_updates, methods=["POST"]),
+    Route("/settings/updates/check", check_updates, methods=["POST"]),
 ]
 
 # Behind TLS (our own, or a trusted proxy's) the session cookie must never travel over

@@ -4,6 +4,17 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [1.4.0] — 2026-11-14
+
+### Added
+- **Update check, off by default.** Settings → *Update check* asks GitHub once a day
+  which version is the latest. When a newer one exists, the admin web shows a banner,
+  and — unless switched off — every agent's instructions get an `UPDATE AVAILABLE`
+  paragraph, so the AI you talk to mentions the new version once per session. Nothing is
+  downloaded or installed. It is the only outbound connection the program opens; only a
+  version number is taken from the answer, so it cannot be used to inject text into the
+  agents' instructions.
+
 ## [1.3.0] — 2026-11-14
 
 ### Added

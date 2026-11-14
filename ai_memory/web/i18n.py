@@ -13,6 +13,22 @@ LANGS = {"en": "English", "cs": "Čeština"}
 _lang: ContextVar[str] = ContextVar("lang", default=DEFAULT_LANG)
 
 CS = {
+    # update check (1.4.0)
+    'A new version is available': 'Je k dispozici nová verze',
+    'this one runs': 'tady běží',
+    'Release notes': 'Poznámky k vydání',
+    'Off by default: with it on, this server asks GitHub once a day which version is the latest -- the only connection Ailurus Memory ever opens to the outside. Nothing is downloaded or installed; you are only told.': 'Ve výchozím stavu vypnuto: když to zapneš, server se jednou denně zeptá GitHubu, která verze je nejnovější -- jediné spojení, které Ailurus Memory kdy otevře ven. Nic se nestahuje ani neinstaluje; jen se to dozvíš.',
+    'The agents then mention a new version once per session, so you hear about it from the AI you are already talking to.': 'Agenti pak na novou verzi jednou za sezení upozorní, takže se to dozvíš od AI, se kterou zrovna mluvíš.',
+    'The last check failed': 'Poslední kontrola selhala',
+    'a newer version is available': 'je k dispozici novější verze',
+    'you are up to date': 'máš aktuální verzi',
+    'Last check': 'Poslední kontrola',
+    'latest release': 'nejnovější vydání',
+    'Never checked.': 'Zatím nekontrolováno.',
+    'Update check': 'Kontrola aktualizací',
+    'Check for new versions': 'Kontrolovat nové verze',
+    'Tell the AI agents too (added to their instructions)': 'Říct to i AI agentům (přidá se do jejich instrukcí)',
+    'Check now': 'Zkontrolovat teď',
     # AI instructions page (1.3.0)
     'AI instructions': 'AI instrukce',
     'These instructions are sent to EVERY AI agent when it connects, before the index of record names (the index is always added by the server and is not part of this text). Everything here can be changed, the SECURITY paragraph included -- but that paragraph is what stops an agent from obeying commands written inside a record. Without it, anyone who can write a record (another agent, an imported note, a pasted web page) can steer every agent that reads it. Change or remove it only if you know why.': 'Tyto instrukce dostane KAŽDÝ AI agent při připojení, ještě před seznamem názvů záznamů (seznam přidává server vždy sám a do tohoto textu nepatří). Změnit se dá všechno, včetně odstavce SECURITY -- jenže právě ten agentům říká, ať neposlouchají příkazy napsané uvnitř záznamů. Bez něj může kdokoli, kdo umí zapsat záznam (jiný agent, importovaná poznámka, vložená webová stránka), řídit každého agenta, který ho přečte. Měň ho nebo mazej jen tehdy, když víš proč.',

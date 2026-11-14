@@ -5,7 +5,8 @@ A private, encrypted memory that several AI assistants can share.
 Instead of explaining your setup, your projects and your preferences again in every new
 chat, the assistant reads and writes a memory that lives on **your** machine. Everything
 in it is encrypted with a passphrase only you know. Nothing is sent anywhere: the program
-listens on your own computer and never makes an outbound connection.
+listens on your own computer and makes no outbound connection (the optional update
+check, off by default, is the only exception).
 
 This is the **portable** build: nothing is installed, and everything the program ever
 writes stays inside this one folder. If you would rather have it in the Start menu with
