@@ -4,6 +4,26 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [1.3.0] — 2026-11-14
+
+### Added
+- **AI instructions in the admin web.** A new **AI instructions** page edits the text
+  every agent receives on connect, which until now was fixed in the code. Everything is
+  editable, the SECURITY paragraph included; the page warns while that paragraph is
+  missing or changed. Each agent can also get its own **addendum**, sent to that agent
+  only under `FOR YOU (<agent name>)`, and **Preview** shows exactly what an agent
+  receives. Changes apply from each client's next connection, with no restart. The text
+  is stored encrypted in the database, so it travels with backups. Until you save your
+  own text the built-in default is used and follows new releases.
+
+### Changed
+- **The default instructions now say "one record = one subject".** Point 4 used to say
+  only "prefer updating an existing record over creating a second one on the same topic",
+  which one agent read as "put everything done on this machine into the machine's
+  record", until that record reached 61 000 characters. It now asks for one record per
+  device, project, problem or decision, a link from the machine record instead of a copy,
+  a split at ~12k characters, and a short status above the first heading.
+
 ## [1.2.2] — 2026-10-26
 
 The first release with the container image (`ghcr.io/tursithepanda/ailurus-memory`).

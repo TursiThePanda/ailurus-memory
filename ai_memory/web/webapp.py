@@ -40,6 +40,7 @@ from ai_memory.core.version import __version__
 # import happens inside _serve(), not at module level.
 from ai_memory import cli
 from ai_memory.features import export
+from ai_memory.features import instructions as ai_instructions
 from ai_memory.core import keystore
 from ai_memory.features import lint
 from ai_memory.server import netconf
@@ -297,7 +298,8 @@ def _nav_links(title: str) -> str:
     layout() is called from thirty places and does not see the request, and threading one
     through all of them to underline a word would be a poor trade."""
     items = ((("/", "Overview"), ("/memories", "Memory"), ("/tags", "Tags"),
-              ("/passphrase", "Password"), ("/settings", "Settings")))
+              ("/instructions", "AI instructions"), ("/passphrase", "Password"),
+              ("/settings", "Settings")))
     out = []
     for href, label in items:
         here = " class=here" if t(label) == title else ""
@@ -653,7 +655,9 @@ async def delete_agent(request: Request):
     form = await request.form()
     if not await check_csrf(request, form):
         return _err(t("CSRF token mismatch."))
-    STORE.remove_agent(form.get("name", ""))
+    name = form.get("name", "")
+    STORE.remove_agent(name)
+    ai_instructions.forget_agent(STORE, name)
     return RedirectResponse("/", 303)
 
 
@@ -1557,6 +1561,135 @@ async def forget_passphrase(request: Request):
     keystore.forget()
     return RedirectResponse("/settings", 303)
 
+# ---------- AI instructions ----------
+def _when(iso: str | None) -> str:
+    return local_time(iso) if iso else ""
+
+
+async def instructions_page(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    cfg = ai_instructions.config(STORE)
+    text = ai_instructions.general(STORE)
+    custom = ai_instructions.is_custom(STORE)
+
+    disclaimer = t(
+        "These instructions are sent to EVERY AI agent when it connects, before the "
+        "index of record names (the index is always added by the server and is not "
+        "part of this text). Everything here can be changed, the SECURITY paragraph "
+        "included -- but that paragraph is what stops an agent from obeying commands "
+        "written inside a record. Without it, anyone who can write a record (another "
+        "agent, an imported note, a pasted web page) can steer every agent that reads "
+        "it. Change or remove it only if you know why.")
+    applies = t("Changes apply to the next connection of each client; no restart is "
+                "needed. A session that is already connected keeps what it received.")
+    if custom:
+        state = (f"<p class=ok>{esc(t('Your own text is in use'))}"
+                 f"{' — ' + esc(t('last changed')) + ' ' + esc(_when(cfg.get('updated'))) if cfg.get('updated') else ''}"
+                 f".</p><p class=muted>{esc(t('A new release does not change your text. The current default is below; copy what you want from it by hand.'))}</p>")
+    else:
+        state = (f"<p class=muted>{esc(t('The built-in default is in use; it follows new releases until you save your own text.'))}</p>")
+    sec_warn = "" if ai_instructions.security_intact(text) else (
+        f"<p class=danger><strong>{esc(t('The SECURITY paragraph is missing or changed.'))}</strong> "
+        f"{esc(t('Agents are no longer told that records are data, not instructions.'))}</p>")
+
+    body = (
+        f"<h2>{esc(t('AI instructions'))}</h2>"
+        f"<p class=danger>{esc(disclaimer)}</p>"
+        f"<p class=muted>{esc(applies)}</p>"
+
+        f"<h3>{esc(t('For all agents'))}</h3>"
+        f"{state}{sec_warn}"
+        f"<form method=post action='/instructions'>{csrf_field(request)}"
+        f"<textarea name=text class=editor rows=28 maxlength={ai_instructions.MAX_CHARS}>{esc(text)}</textarea>"
+        f"<p class=muted>{len(text)} / {ai_instructions.MAX_CHARS} {esc(t('characters'))}</p>"
+        f"<button type=submit>{esc(t('Save'))}</button></form>"
+        + (f"<form method=post action='/instructions/reset' class=inline "
+           f"onsubmit=\"return confirm('{esc(t('Replace your text with the built-in default?'))}')\">"
+           f"{csrf_field(request)}<button type=submit class=danger>{esc(t('Restore the default'))}</button></form>"
+           f"<details><summary>{esc(t('Show the built-in default'))}</summary>"
+           f"<textarea class=editor rows=20 readonly>{esc(ai_instructions.DEFAULT)}</textarea></details>"
+           if custom else ""))
+
+    rows = ""
+    for a in STORE.list_agents():
+        name = a["name"]
+        entry = cfg["agents"].get(name) or {}
+        changed = f" <span class=muted>{esc(t('last changed'))} {esc(_when(entry.get('updated')))}</span>" \
+            if entry.get("updated") else ""
+        rows += (f"<label>{esc(name)}{changed}</label>"
+                 f"<textarea name='agent::{esc(name)}' class=editor rows=4 "
+                 f"maxlength={ai_instructions.MAX_AGENT_CHARS}>{esc(entry.get('text', ''))}</textarea>")
+    agents_block = (
+        f"<h3>{esc(t('Addendum for a single agent'))}</h3>"
+        f"<p class=muted>{esc(t('Appended under the heading FOR YOU (<agent name>) for that agent only. Leave empty for none. Up to'))} "
+        f"{ai_instructions.MAX_AGENT_CHARS} {esc(t('characters'))}.</p>"
+        + (f"<form method=post action='/instructions/agents'>{csrf_field(request)}{rows}"
+           f"<p><button type=submit>{esc(t('Save'))}</button></p></form>"
+           if rows else f"<p class=muted>{esc(t('(none)'))}</p>"))
+
+    preview_opts = "".join(f"<option>{esc(a['name'])}</option>" for a in STORE.list_agents())
+    preview = (f"<h3>{esc(t('Preview'))}</h3>"
+               f"<form method=get action='/instructions/preview'>"
+               f"<select name=agent>{preview_opts}</select> "
+               f"<button type=submit>{esc(t('Show what this agent receives'))}</button></form>"
+               if preview_opts else "")
+    return layout(t("AI instructions"), cards(body + agents_block + preview))
+
+
+async def instructions_preview(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    agent = request.query_params.get("agent", "")
+    if agent not in {a["name"] for a in STORE.list_agents()}:
+        return _err(t("No such agent."), "/instructions")
+    text = ai_instructions.for_agent(STORE, agent)
+    body = (f"<h2>{esc(t('AI instructions'))}: {esc(agent)}</h2>"
+            f"<p class=muted>{esc(t('Followed by the index of the records this agent may read.'))}</p>"
+            f"<textarea class=editor rows=32 readonly>{esc(text)}</textarea>"
+            f"<p><a href='/instructions'>{esc(t('back'))}</a></p>")
+    return layout(t("AI instructions"), body)
+
+
+async def save_instructions(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/instructions")
+    try:
+        ai_instructions.save_general(STORE, form.get("text", ""))
+    except ValueError as e:
+        return _err(str(e), "/instructions")
+    return RedirectResponse("/instructions", 303)
+
+
+async def reset_instructions(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/instructions")
+    ai_instructions.reset_general(STORE)
+    return RedirectResponse("/instructions", 303)
+
+
+async def save_agent_instructions(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/instructions")
+    known = {a["name"] for a in STORE.list_agents()}
+    try:
+        for key, value in form.multi_items():
+            if key.startswith("agent::") and key[7:] in known:
+                ai_instructions.save_agent(STORE, key[7:], value)
+    except ValueError as e:
+        return _err(str(e), "/instructions")
+    return RedirectResponse("/instructions", 303)
+
+
 routes = [
     Route("/login", login, methods=["GET", "POST"]),
     Route("/logout", logout, methods=["POST"]),
@@ -1577,6 +1710,11 @@ routes = [
     Route("/tags", tags_page),
     Route("/tags/rename", rename_tag, methods=["POST"]),
     Route("/tags/delete", delete_tag, methods=["POST"]),
+    Route("/instructions", instructions_page),
+    Route("/instructions", save_instructions, methods=["POST"]),
+    Route("/instructions/reset", reset_instructions, methods=["POST"]),
+    Route("/instructions/agents", save_agent_instructions, methods=["POST"]),
+    Route("/instructions/preview", instructions_preview),
     Route("/settings", settings_page),
     Route("/settings/export", save_export, methods=["POST"]),
     Route("/settings/export/run", run_export, methods=["POST"]),

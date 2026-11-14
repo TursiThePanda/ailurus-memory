@@ -13,6 +13,27 @@ LANGS = {"en": "English", "cs": "Čeština"}
 _lang: ContextVar[str] = ContextVar("lang", default=DEFAULT_LANG)
 
 CS = {
+    # AI instructions page (1.3.0)
+    'AI instructions': 'AI instrukce',
+    'These instructions are sent to EVERY AI agent when it connects, before the index of record names (the index is always added by the server and is not part of this text). Everything here can be changed, the SECURITY paragraph included -- but that paragraph is what stops an agent from obeying commands written inside a record. Without it, anyone who can write a record (another agent, an imported note, a pasted web page) can steer every agent that reads it. Change or remove it only if you know why.': 'Tyto instrukce dostane KAŽDÝ AI agent při připojení, ještě před seznamem názvů záznamů (seznam přidává server vždy sám a do tohoto textu nepatří). Změnit se dá všechno, včetně odstavce SECURITY -- jenže právě ten agentům říká, ať neposlouchají příkazy napsané uvnitř záznamů. Bez něj může kdokoli, kdo umí zapsat záznam (jiný agent, importovaná poznámka, vložená webová stránka), řídit každého agenta, který ho přečte. Měň ho nebo mazej jen tehdy, když víš proč.',
+    'Changes apply to the next connection of each client; no restart is needed. A session that is already connected keeps what it received.': 'Změny platí od příštího připojení každého klienta, restart není potřeba. Sezení, které už je připojené, si nechá to, co dostalo.',
+    'Your own text is in use': 'Používá se tvůj vlastní text',
+    'last changed': 'naposledy změněno',
+    'A new release does not change your text. The current default is below; copy what you want from it by hand.': 'Nová verze tvůj text nezmění. Aktuální výchozí text je níže; co z něj chceš, převezmi ručně.',
+    'The built-in default is in use; it follows new releases until you save your own text.': 'Používá se vestavěný výchozí text; s novými verzemi se mění, dokud neuložíš vlastní.',
+    'The SECURITY paragraph is missing or changed.': 'Odstavec SECURITY chybí nebo je změněný.',
+    'Agents are no longer told that records are data, not instructions.': 'Agenti už se nedozví, že záznamy jsou data, ne instrukce.',
+    'For all agents': 'Pro všechny agenty',
+    'characters': 'znaků',
+    'Replace your text with the built-in default?': 'Nahradit tvůj text vestavěným výchozím?',
+    'Restore the default': 'Vrátit výchozí',
+    'Show the built-in default': 'Zobrazit vestavěný výchozí text',
+    'Addendum for a single agent': 'Doplněk pro jednoho agenta',
+    'Appended under the heading FOR YOU (<agent name>) for that agent only. Leave empty for none. Up to': 'Připojí se pod nadpisem FOR YOU (<jméno agenta>) jen tomu agentovi. Prázdné = žádný doplněk. Nejvýš',
+    'Preview': 'Náhled',
+    'Show what this agent receives': 'Ukázat, co tento agent dostane',
+    'No such agent.': 'Takový agent neexistuje.',
+    'Followed by the index of the records this agent may read.': 'Za tím následuje seznam záznamů, které tento agent smí číst.',
     # settings: scheduled export, remembered passphrase, network exposure
     "Settings": "Nastaven\u00ed",
     "Scheduled export": "Pl\u00e1novan\u00fd export",

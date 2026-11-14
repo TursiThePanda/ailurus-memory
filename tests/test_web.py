@@ -347,6 +347,46 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     os.environ.pop("AI_MEMORY_CONFIG_DIR")
     print("network and TLS settings OK")
 
+    # AI instructions page (1.3.0): edit, warning when SECURITY goes, per-agent addendum,
+    # preview, reset, CSRF, and the addendum dies with its agent.
+    from ai_memory.features import instructions as ai_instr
+    s.add_agent("instr-agent", {"shared": "rw"})
+    page = c.get("/instructions")
+    assert page.status_code == 200 and "AI instructions" in page.text
+    assert "SECURITY" in page.text and "is missing or changed" not in page.text
+    assert "built-in default is in use" in page.text
+    r = c.post("/instructions", data={"text": "own text, no security"})
+    assert "CSRF" in r.text and not ai_instr.is_custom(s), "no token, no change"
+    r = c.post("/instructions", data={"csrf": csrf_of(page.text), "text": "own text, no security"},
+               follow_redirects=False)
+    assert r.status_code == 303 and ai_instr.general(s) == "own text, no security"
+    page = c.get("/instructions")
+    assert "is missing or changed" in page.text and "Your own text is in use" in page.text
+    r = c.post("/instructions", data={"csrf": csrf_of(page.text),
+                                      "text": "z" * (ai_instr.MAX_CHARS + 1)})
+    assert "too long" in r.text and ai_instr.general(s) == "own text, no security"
+    r = c.post("/instructions/agents", follow_redirects=False,
+               data={"csrf": csrf_of(page.text), "agent::instr-agent": "Speak simply.",
+                     "agent::no-such-agent": "ignored"})
+    assert r.status_code == 303
+    assert "FOR YOU (instr-agent)\nSpeak simply." in ai_instr.for_agent(s, "instr-agent")
+    assert "no-such-agent" not in ai_instr.config(s)["agents"]
+    prev = c.get("/instructions/preview?agent=instr-agent").text
+    assert "Speak simply." in prev and "own text, no security" in prev
+    assert "No such agent" in c.get("/instructions/preview?agent=ghost").text
+    r = c.post("/instructions/reset", data={"csrf": csrf_of(c.get("/instructions").text)},
+               follow_redirects=False)
+    assert r.status_code == 303 and ai_instr.general(s) == ai_instr.DEFAULT
+    c.post("/agents/delete", data={"csrf": csrf_of(c.get("/").text), "name": "instr-agent"})
+    assert "instr-agent" not in ai_instr.config(s)["agents"], "addendum must go with the agent"
+    i18n_mod = __import__("ai_memory.web.i18n", fromlist=["i18n"])
+    i18n_mod.set_lang("cs")
+    try:
+        assert i18n_mod.t("AI instructions") == "AI instrukce"
+    finally:
+        i18n_mod.set_lang("en")
+    print("AI instructions page OK")
+
     # logout
     assert c.get("/logout").status_code == 405, "logout is POST-only"
     r = c.post("/logout", follow_redirects=False)

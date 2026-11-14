@@ -39,7 +39,7 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
 ```powershell
 # Windows PowerShell: compare the output with the line for this file in SHA256SUMS
-Get-FileHash .\ailurus-memory-1.2.2-windows-setup.exe -Algorithm SHA256
+Get-FileHash .\ailurus-memory-1.3.0-windows-setup.exe -Algorithm SHA256
 ```
 
 Every file must report `OK` (or the hashes must be the same, letter for letter). If one
@@ -206,6 +206,15 @@ claude mcp add ai-memory --transport http http://localhost:8080/mcp \
 ## Admin web
 Served by the same process as the MCP endpoint, at `http://127.0.0.1:8080/` (log in with the master passphrase; `ai-memory start` brings it up). Sessions last 8 hours at most and expire after 30 minutes idle; after 5 wrong passphrases the login is throttled. There: agent and key management, the permission matrix, and a **memory browser** (the content is decrypted only here, in the browser, never on disk). It filters by namespace, type and tag, searches full text, and every row expands to show the record's parameters. Opening a record gives an editor for its description, type, tags, content and per-record permissions, with the full history underneath. Tags can be renamed or deleted from the UI. Sign-in with your master passphrase, a session cookie, CSRF protection, dark mode, English with a switch to Czech.
 
+### AI instructions (since 1.3.0)
+The **AI instructions** page holds the text every agent receives when it connects (the `instructions` field of the MCP `initialize` response), before the index of record names. It starts as the built-in default, which follows new releases; once you save your own text it is kept as written, and the page shows the current default next to it so you can copy improvements over by hand. **Restore the default** goes back.
+
+Everything can be edited, the SECURITY paragraph included. The page warns while that paragraph is missing or changed: it is what tells agents that records are data, not instructions, so without it anyone who can write a record can steer the agents that read it.
+
+Below the general text, each agent can get an **addendum**, appended under `FOR YOU (<agent name>)` for that agent only (for example simpler wording for a small local model, or a rule for one machine). **Preview** shows exactly what a chosen agent receives. Limits: 8 000 characters for the general text, 2 000 per addendum. The index is always appended by the server and is not part of the editable text.
+
+The settings are stored encrypted in the database, so they are part of every backup and come back with a restore. A change applies to each client's **next** connection, with no restart; a session that is already connected keeps what it received. Deleting an agent deletes its addendum.
+
 ## Network, access and HTTPS
 
 By default the app listens on localhost only. Everything about who can reach it lives in the admin web, under **Settings → Network and access**:
@@ -294,7 +303,7 @@ A record with no headings behaves exactly as before. **Every partial response sa
 
 `memory_verify` stamps a record as *checked against reality, today*. That is a different fact from `updated`, and conflating them is what quietly rots a memory: `updated` says when the text last changed, so a record written once and never opened again is indistinguishable from one confirmed yesterday. Editing the content clears the stamp automatically — a confirmation must not outlive the text it vouched for; re-tagging does not, because it changes no claim.
 
-On connect, the server sends the memory protocol plus an index of record *names* (filtered by the agent's ACL) in the `instructions` field of the `initialize` response, so an agent knows what is stored without fetching everything. Detail is pulled on demand. The index is built at connection time — a record written now becomes visible in the next session.
+On connect, the server sends the memory protocol (editable on the admin web's AI instructions page) plus an index of record *names* (filtered by the agent's ACL) in the `instructions` field of the `initialize` response, so an agent knows what is stored without fetching everything. Detail is pulled on demand. The index is built at connection time — a record written now becomes visible in the next session.
 
 Tags are a closed taxonomy: an agent may only use a tag that already exists, or one the user explicitly approved and it passes in `new_tags`. This stops the taxonomy fragmenting into `net` / `network` / `networking` depending on which model happens to be writing.
 
@@ -421,6 +430,7 @@ python tests/test_semantic.py # embeddings: encrypted vectors, incremental index
                         # (skips itself when the optional model is absent)
 python tests/test_download.py # model download: resume, a server ignoring Range, a dead server
 python tests/test_index.py   # the handshake index, ACL on the index and the audit, delete/move/audit
+python tests/test_instructions.py   # editable AI instructions: defaults, limits, per-agent addendum, live change
 python tests/test_http.py    # e2e over HTTP: 401 without a key, ACL enforced
 python tests/test_web.py     # the admin web: login, permission matrix, filtering, editing, tag admin, CSRF
 ```
