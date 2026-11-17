@@ -44,6 +44,7 @@ from ai_memory.features import restore
 from ai_memory.features import instructions as ai_instructions
 from ai_memory.core import keystore
 from ai_memory.features import lint
+from ai_memory.features.sections import FULL_READ_LIMIT
 from ai_memory.features import updates
 from ai_memory.server import netconf
 from ai_memory.web.i18n import LANGS, get_lang, set_lang, t
@@ -178,7 +179,12 @@ a.tag{display:inline-block;background:var(--accent-soft);color:var(--accent);
       font-size:.82rem;font-weight:500;text-decoration:none}
 a.tag:hover{filter:brightness(.97)}
 .ok{color:var(--ok)}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+th.sortable:hover{color:var(--fg)}
+th[aria-sort=ascending]::after{content:" \\25b4"}
+th[aria-sort=descending]::after{content:" \\25be"}
+td.tags{min-width:7rem}
 img.thumb{max-width:140px;max-height:100px;display:block;border:1px solid var(--border);
           border-radius:6px;background:var(--surface)}
 button.expander{border:none;background:none;padding:0 .3rem;color:var(--muted);
@@ -799,6 +805,56 @@ document.addEventListener('click', function (e) {
 });
 </script>"""
 
+# Sorting by a column header, in the browser. Each record is two rows (the record and
+# its hidden detail row), so they move as a pair. A cell's data-sort, when present, is
+# the value to sort by (an ISO date, a character count); otherwise its text. Without JS
+# the table keeps the server's order (newest first) and nothing else is lost.
+SORT_JS = """<script>
+document.addEventListener('click', function (e) {
+  var th = e.target.closest('th.sortable'); if (!th) return;
+  var table = th.closest('table'), body = table.tBodies[0];
+  var col = Array.prototype.indexOf.call(th.parentNode.children, th);
+  var asc = th.getAttribute('aria-sort') !== 'ascending';
+  table.querySelectorAll('th.sortable').forEach(function (h) { h.removeAttribute('aria-sort'); });
+  th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+  var key = function (tr) {
+    var c = tr.children[col]; return c.hasAttribute('data-sort') ? c.dataset.sort : c.textContent.trim();
+  };
+  var pairs = Array.prototype.filter.call(body.rows, function (r) { return r.classList.contains('rec'); })
+    .map(function (r) { return [r, r.nextElementSibling]; });
+  pairs.sort(function (a, b) {
+    var x = key(a[0]), y = key(b[0]), nx = parseFloat(x), ny = parseFloat(y);
+    var d = (!isNaN(nx) && !isNaN(ny) && String(nx) === x && String(ny) === y)
+      ? nx - ny : x.localeCompare(y, undefined, {sensitivity: 'base'});
+    return asc ? d : -d;
+  });
+  pairs.forEach(function (p) { body.appendChild(p[0]); if (p[1]) body.appendChild(p[1]); });
+});
+</script>"""
+
+
+def _ago(days: float) -> str:
+    """'3 days ago' / '4 months ago' -- how long since, readable at a glance."""
+    if days < 1:
+        return t("today")
+    if days < 60:
+        return t("{n} d ago").format(n=int(days))
+    return t("{n} mo ago").format(n=int(days // 30))
+
+
+def _size_cell(size: int | None) -> str:
+    """Content length. Past FULL_READ_LIMIT memory_read hands back only the outline,
+    so those records are marked: candidates for a split or at least for headings."""
+    if size is None:
+        return "<td class=num data-sort=0></td>"
+    shown = f"{size / 1000:.1f}k" if size >= 1000 else str(size)
+    title = t("{n} characters").format(n=size)
+    cls = ""
+    if size >= FULL_READ_LIMIT:
+        cls = " stale"
+        title += " · " + t("over the limit: memory_read returns only the outline")
+    return f"<td class='num{cls}' data-sort={size} title='{esc(title)}'>{esc(shown)}</td>"
+
 
 def _verified_label(m: dict) -> str:
     """Short form for the table: when the record was last confirmed against reality.
@@ -813,8 +869,11 @@ def _verified_label(m: dict) -> str:
     if not v:
         return f"<span class=muted title='{esc(t('never confirmed'))}'>—</span>"
     age = _age_days(v)
-    cls = " class=stale" if age is not None and age >= lint.STALE_AFTER_DAYS else ""
-    return f"<span{cls} title='{esc(m.get('verified_by') or '')}'>{esc(v[:10])}</span>"
+    if age is None:
+        return f"<span title='{esc(m.get('verified_by') or '')}'>{esc(v[:10])}</span>"
+    cls = " class=stale" if age >= lint.STALE_AFTER_DAYS else ""
+    title = f"{v[:10]} · {m.get('verified_by') or '?'}"
+    return f"<span{cls} title='{esc(title)}'>{esc(_ago(age))}</span>"
 
 
 def _verified_detail(m: dict) -> str:
@@ -881,39 +940,45 @@ async def memories(request: Request):
     namespaces = sorted({m["namespace"] for m in everything})
     types = sorted({m["type"] for m in everything})
 
-    cols = 9
+    sizes = STORE.sizes()
+    cols = 10
     body_rows = []
     for i, m in enumerate(items):
         rid = f"d{i}"
         link = f"/memory?ns={quote_plus(m['namespace'])}&name={quote_plus(m['name'])}"
         tags = m.get("tags") or []
-        # the count alone says nothing; hovering it names the tags (native tooltip)
-        tags_cell = (f"<td class=num title='{esc(', '.join(tags))}'>{len(tags)}</td>"
-                     if tags else "<td class=num>0</td>")
+        # tags as chips that filter the table; the current namespace/type filter is kept
+        tags_html = _tag_links(tags, ns, type_) or "<span class=muted>—</span>"
         body_rows.append(
-            f"<tr><td><button type=button class=expander data-target='{rid}'"
+            f"<tr class=rec><td><button type=button class=expander data-target='{rid}'"
             f" aria-expanded=false title='{esc(t('show detail'))}'>\u25b8</button></td>"
             f"<td>{esc(m['namespace'])}</td>"
             f"<td><a href='{link}'>{esc(m['name'])}</a></td>"
             f"<td>{esc(m['description'])}</td>"
             f"<td>{esc(m['type'])}</td>"
-            f"{tags_cell}"
+            f"<td class=tags data-sort='{esc(' '.join(tags))}'>{tags_html}</td>"
+            f"{_size_cell(sizes.get((m['namespace'], m['name'])))}"
             f"<td>{_share_label(m.get('share'))}</td>"
-            f"<td>{_verified_label(m)}</td>"
-            f"<td>{esc(local_time(m['updated']))}</td></tr>")
+            f"<td data-sort='{esc(m.get('verified') or '')}'>{_verified_label(m)}</td>"
+            f"<td data-sort='{esc(m['updated'])}'>{esc(local_time(m['updated']))}</td></tr>")
         body_rows.append(_detail_row(m, rid, cols))
     rows = "".join(body_rows) or f"<tr><td colspan={cols}>{esc(t('(nothing)'))}</td></tr>"
+
+    def th(label: str, sortable: bool = True) -> str:
+        if not sortable:
+            return f"<th>{esc(label)}</th>"
+        return f"<th class=sortable title='{esc(t('click to sort'))}'>{esc(label)}</th>"
 
     title = t("Memory: all") if not (ns or type_ or tag or q) else t("Memory: filtered")
     count = t("{n} of {total} records").format(n=len(items), total=len(everything))
     body = (f"<h2>{esc(title)}</h2>"
             f"{_filter_bar(namespaces, types, STORE.known_tags(), ns, type_, tag, q)}"
             f"<p class=muted>{esc(count)} · <a href='/tags'>{esc(t('Manage tags'))}</a></p>"
-            f"<table><tr><th></th><th>ns</th><th>{esc(t('name'))}</th>"
-            f"<th>{esc(t('description'))}</th><th>{esc(t('type'))}</th>"
-            f"<th>{esc(t('tags'))}</th><th>{esc(t('visible to'))}</th>"
-            f"<th>{esc(t('checked'))}</th>"
-            f"<th>{esc(t('updated'))}</th></tr>{rows}</table>{ROW_TOGGLE_JS}")
+            f"<table><thead><tr><th></th>{th('ns')}{th(t('name'))}"
+            f"{th(t('description'), False)}{th(t('type'))}"
+            f"{th(t('tags'))}{th(t('size'))}{th(t('visible to'))}"
+            f"{th(t('checked'))}{th(t('updated'))}</tr></thead>"
+            f"<tbody>{rows}</tbody></table>{ROW_TOGGLE_JS}{SORT_JS}")
     return layout(title, body)
 
 

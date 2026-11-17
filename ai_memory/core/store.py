@@ -583,6 +583,19 @@ class SecureStore:
         out.sort(key=lambda m: m["updated"], reverse=True)
         return out
 
+    def sizes(self) -> dict[tuple[str, str], int]:
+        """Content length in characters for every record, keyed by (namespace, name).
+
+        Kept out of the summary on purpose: list() feeds memory_list, and every agent
+        would pay for a number only the admin table uses."""
+        with self._lock:
+            rows = self.db.execute("SELECT namespace, nonce, ct FROM memories").fetchall()
+            out = {}
+            for ns, nonce, ct in rows:
+                p = self.cipher.decrypt(nonce, ct)
+                out[(ns, p["name"])] = len(p.get("content", ""))
+        return out
+
     # ---------- vectors ----------
     def set_vector(self, namespace: str, name: str, vector, fingerprint: str,
                    model: str | None = None) -> None:

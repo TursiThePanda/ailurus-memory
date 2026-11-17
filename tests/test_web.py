@@ -150,8 +150,24 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     listing = c.get("/memories").text
     assert "class=expander" in listing and "class=detail" in listing
     assert "hidden" in listing, "the detail row should start collapsed"
-    assert "<td class=num title='network'>1</td>" in listing, \
-        "hovering the tag count should name the tags"
+    # the tags column holds the tags themselves, as filter links
+    assert "<td class=tags data-sort='network'><a class=tag href='/memories?tag=network'>" \
+        in listing, "the tags column should list the tags as filter links"
+    # size column: character count, sortable by the raw number
+    seed_size = len(s.read("shared", "seed")["content"])
+    assert f"data-sort={seed_size} " in listing, "the size column should carry the raw count"
+    big = "x" * 13_000
+    s.write(content=big, description="big record", agent="claude",
+            namespace="shared", name="long")
+    assert "num stale' data-sort=13000" in c.get("/memories").text, \
+        "a record past the full-read limit should be marked"
+    s.delete("shared", "long", agent="claude")
+    # sorting: headers are clickable, rows sit in a tbody the script can reorder
+    assert "th class=sortable" in listing and "<tbody>" in listing
+    assert "aria-sort" in listing, "the sort script should be on the page"
+    # checked: a relative age rather than a bare date
+    assert webapp._ago(0.2) == "today" and webapp._ago(3.5) == "3 d ago"
+    assert webapp._ago(100) == "3 mo ago"
 
     # editing a record through the UI: description, type, tags and content
     page = c.get("/memory", params={"ns": "shared", "name": "seed"}).text

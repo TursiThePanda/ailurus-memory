@@ -312,6 +312,12 @@ CS = {
         "nikdy — nikdo tento záznam neověřil proti skutečnosti",
     "nobody": "nikdo",
     "{n} agents": "{n} agentů",
+    "today": "dnes",
+    "{n} d ago": "před {n} d",
+    "{n} mo ago": "před {n} měs.",
+    "{n} characters": "{n} znaků",
+    "over the limit: memory_read returns only the outline": "nad limitem: memory_read vrátí jen osnovu",
+    "click to sort": "kliknutím seřadit",
     "everyone allowed by the namespace ACL": "všichni podle práv namespace",
     "nobody — the record is hidden from every agent":
         "nikdo — záznam je skrytý všem agentům",
