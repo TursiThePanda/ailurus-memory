@@ -319,7 +319,7 @@ Tags are a closed taxonomy: an agent may only use a tag that already exists, or 
 ## Hygiene checks
 A memory decays quietly: a record gets renamed and every `[[link]]` to it dies, a record says "AWAITING VERIFICATION" for a month, a tag is used once and forgotten. `memory_lint` (MCP) and `ai-memory-manage lint` (CLI) find that class of problem with no model and no network — they work when nothing else is running:
 
-- **broken** — a `[[link]]` pointing at a record that does not exist; an empty record
+- **broken** — a `[[link]]` pointing at a record that does not exist; an empty record. Both `[[name]]` and `[[namespace/name]]` resolve; links quoted in backticks or code blocks and placeholder words such as `[[link]]` are not checked. A broken link names the closest existing record when one is clearly meant (a typo or a rename).
 - **stale** — the record still shouts AWAITING / NOT VERIFIED / TODO / STILL OPEN about itself; or it holds a volatile fact (an IP, a port, a version, an endpoint) that nobody has confirmed in 180 days
 - **hygiene** — untagged, no description, a description that only repeats the name; a record no agent has read since counting began; **numbers that look measured but carry no date or source**
 

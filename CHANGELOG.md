@@ -4,6 +4,30 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [1.6.0] — 2026-11-17
+
+### Added
+- **The memory list in the admin web is easier to read.** The tags column shows the
+  tags themselves, each a link that filters the table. A new *size* column gives the
+  length of each record and marks the ones past the full-read limit (where
+  `memory_read` returns only the outline). *Checked* says how long ago a record was
+  confirmed ("12 d ago"), with the date and who checked it on hover. Every column except
+  the description sorts on a click on its header.
+
+### Changed
+- **Colours in the admin web follow one rule:** green = success, yellow = warning,
+  red = error. Warnings that used to be red (a long-unverified record, a record hidden
+  from every agent, the notice before importing a backup, the warnings on the AI
+  instructions page) are now yellow.
+
+### Fixed
+- **`memory_lint` no longer reports healthy links as broken.** `[[namespace/name]]`
+  links resolve, links inside backticks or code blocks are ignored, and so are
+  placeholder words used when a record explains the link syntax (`[[link]]`). On a real
+  memory every "broken link" it reported was one of these. A broken link now also
+  carries `target` and, when one existing record is clearly meant, `suggestion`.
+- **"Last export failed" was not shown in red** (it used a CSS class that did not exist).
+
 ## [1.5.0] — 2026-11-14
 
 ### Added

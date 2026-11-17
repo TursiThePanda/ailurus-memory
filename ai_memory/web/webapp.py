@@ -64,7 +64,7 @@ CSS = """
   --border:#e8e0d4; --surface:#ffffff; --surface2:#f4efe7;
   --accent:#ff8101; --accent-fg:#fff; --accent-soft:#fff1e0; --deep:#800101;
   --link:#c25e00; --danger:#c0261d; --ok:#2f8f4e; --ok-soft:#e6f4ea;
-  --warn-soft:#fff4dc;
+  --warn:#8a6100; --warn-soft:#fff4dc;
   --key-bg:#fff8e6; --key-border:#f0c070; --key-fg:#1f1a17;
   --shadow:0 1px 2px rgba(60,30,10,.06),0 4px 16px rgba(60,30,10,.06);
   --radius:12px;
@@ -75,7 +75,7 @@ CSS = """
     --border:#3a332d; --surface:#211d1a; --surface2:#2a2521;
     --accent:#ff8f1f; --accent-fg:#1a0d00; --accent-soft:#3a2510; --deep:#ff9c8a;
     --link:#ffb061; --danger:#ff7a6e; --ok:#6fd08f; --ok-soft:#1d3324;
-    --warn-soft:#3a2c12;
+    --warn:#e8b84a; --warn-soft:#3a2c12;
     --key-bg:#2b2310; --key-border:#8a6a20; --key-fg:#f6dfa8;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
   }
@@ -160,7 +160,9 @@ pre{white-space:pre-wrap;background:var(--surface2);border:1px solid var(--borde
 .muted{color:var(--muted);font-size:.9rem}
 .banner{border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);background:var(--warn-soft);
         padding:.7rem 1rem;border-radius:var(--radius);margin:0 0 1rem}
-.stale{color:var(--danger)}
+/* colour rule (David 2026-11-14): green = success, yellow = warning, red = error */
+.warn{color:var(--warn)}
+.stale{color:var(--warn)}
 .filters{display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;margin:0 0 1rem;
          background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
          padding:.8rem 1rem;box-shadow:var(--shadow)}
@@ -764,7 +766,7 @@ def _share_label(share) -> str:
     if share is None:
         return f"<span class=muted>{esc(t('namespace'))}</span>"
     if not share:
-        return f"<span class=danger>🔒 {esc(t('nobody'))}</span>"
+        return f"<span class=warn>🔒 {esc(t('nobody'))}</span>"
     return f"🔒 {esc(t('{n} agents').format(n=len(share)))}"
 
 
@@ -1337,7 +1339,7 @@ def _settings_response(request: Request, modal: str = "") -> HTMLResponse:
 
     status = ""
     if cfg.get("last_error"):
-        status = f"<p class=err>{esc(t('Last export failed'))}: {esc(cfg['last_error'])}</p>"
+        status = f"<p class=danger>{esc(t('Last export failed'))}: {esc(cfg['last_error'])}</p>"
     elif cfg.get("last_run"):
         status = (f"<p class=ok>{esc(t('Last export'))}: {esc(local_time(cfg['last_run'], seconds=True))}"
                   f" &mdash; {esc(cfg.get('last_detail', ''))}</p>")
@@ -1496,7 +1498,7 @@ def _restore_confirm_dialog(request: Request, token: str, filename: str,
         f"<tr><td>{esc(t('Agents'))}</td><td>{esc(agents)}</td></tr>"
         f"<tr><td>{esc(t('Last change'))}</td><td>{esc(local_time(info['newest']))}</td></tr>"
         f"</table>"
-        f"<p class=danger>{esc(warn)}</p>"
+        f"<p class=warn>{esc(warn)}</p>"
         f"<div class=actions>"
         f"<form method=post action='/settings/restore/cancel'>{csrf_field(request)}"
         f"<button type=submit class=ghost>{esc(t('Cancel'))}</button></form>"
@@ -1924,12 +1926,12 @@ async def instructions_page(request: Request):
     else:
         state = (f"<p class=muted>{esc(t('The built-in default is in use; it follows new releases until you save your own text.'))}</p>")
     sec_warn = "" if ai_instructions.security_intact(text) else (
-        f"<p class=danger><strong>{esc(t('The SECURITY paragraph is missing or changed.'))}</strong> "
+        f"<p class=warn><strong>{esc(t('The SECURITY paragraph is missing or changed.'))}</strong> "
         f"{esc(t('Agents are no longer told that records are data, not instructions.'))}</p>")
 
     body = (
         f"<h2>{esc(t('AI instructions'))}</h2>"
-        f"<p class=danger>{esc(disclaimer)}</p>"
+        f"<p class=warn>{esc(disclaimer)}</p>"
         f"<p class=muted>{esc(applies)}</p>"
 
         f"<h3>{esc(t('For all agents'))}</h3>"

@@ -535,3 +535,9 @@ if hasattr(time, "tzset"):
     time.tzset()
 assert webapp.local_time("") == "" and webapp.local_time("garbage") == "garbage"
 print("local time OK")
+
+# colour rule: green = success, yellow = warning, red = error -- and every class used exists
+assert ".warn{color:var(--warn)}" in webapp.CSS and "--warn:" in webapp.CSS
+assert ".stale{color:var(--warn)}" in webapp.CSS, "a stale record is a warning, not an error"
+assert "class=err>" not in open(webapp.__file__, encoding="utf-8").read(), "no such CSS class"
+print("colour rule OK")
