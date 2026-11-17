@@ -101,6 +101,8 @@ nav a:hover{background:var(--surface2);color:var(--fg);text-decoration:none}
 nav a.here{background:var(--accent-soft);color:var(--accent)}
 .tools{display:flex;gap:.5rem;align-items:center;color:var(--muted);font-size:.88rem}
 main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 4rem}
+/* the memory list: name, description, tags, updated -- wide so the description shows */
+main.wide{max-width:1500px}
 h1{font-size:1.5rem;letter-spacing:-.02em}
 h2{font-size:1.35rem;margin:.3rem 0 1rem;letter-spacing:-.02em}
 h3{font-size:1.02rem;margin:0 0 .7rem}
@@ -188,12 +190,22 @@ th.sortable:hover{color:var(--fg)}
 th[aria-sort=ascending]::after{content:" \\25b4"}
 th[aria-sort=descending]::after{content:" \\25be"}
 td.tags{min-width:7rem}
+/* memory list: a long description is clamped to two lines (the whole text is in the
+   row's expander) and long paths/URLs/names may break anywhere -- without that one
+   unbreakable token sets the table's minimum width and it runs past the page */
+td.desc{min-width:14rem;width:40%}
+td.desc .clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+               line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+td.name{overflow-wrap:anywhere;min-width:8rem}
+td.date{white-space:nowrap}
+.tablewrap{overflow-x:auto}
+.tablewrap>table{margin:.6rem 0 1rem}
 img.thumb{max-width:140px;max-height:100px;display:block;border:1px solid var(--border);
           border-radius:6px;background:var(--surface)}
 button.expander{border:none;background:none;padding:0 .3rem;color:var(--muted);
                 font-size:.9rem;line-height:1;margin:0}
 tr.detail>td{background:var(--surface2)}
-.detailbox p{margin:.3rem 0}
+.detailbox p{margin:.3rem 0;overflow-wrap:anywhere}
 .agentlist{display:flex;gap:1rem;flex-wrap:wrap}
 .agentbox{white-space:nowrap}
 legend{padding:0 .4rem;color:var(--muted);font-size:.9rem}
@@ -289,7 +301,7 @@ def favicon_href() -> str:
 APP_NAME = "Ailurus Memory"
 
 
-def layout(title: str, body: str, banner: str = "") -> HTMLResponse:
+def layout(title: str, body: str, banner: str = "", wide: bool = False) -> HTMLResponse:
     fav = favicon_href()
     icon = app_icon()
     head = "" if title == t("Sign in") else (
@@ -301,7 +313,7 @@ def layout(title: str, body: str, banner: str = "") -> HTMLResponse:
 <meta name=viewport content="width=device-width,initial-scale=1"><title>{esc(title)} – {APP_NAME}</title>
 {f'<link rel=icon href="{fav}">' if fav else ''}
 <style>{CSS}</style></head><body>
-{head}<main>{update_banner() if head else ""}{banner}{body}</main></body></html>""")
+{head}<main{" class=wide" if wide else ""}>{update_banner() if head else ""}{banner}{body}</main></body></html>""")
 
 
 def cards(body: str) -> str:
@@ -761,16 +773,6 @@ def _qs(**params) -> str:
     return "&".join(f"{k}={quote_plus(v)}" for k, v in params.items() if v)
 
 
-def _share_label(share) -> str:
-    """How a record's sharing shows up in the table. `None` is the ordinary case —
-    the namespace ACL decides — so it must not look like an alarm."""
-    if share is None:
-        return f"<span class=muted>{esc(t('namespace'))}</span>"
-    if not share:
-        return f"<span class=warn>🔒 {esc(t('nobody'))}</span>"
-    return f"🔒 {esc(t('{n} agents').format(n=len(share)))}"
-
-
 def _filter_bar(namespaces: list[str], types: list[str], tags: dict[str, int],
                 ns: str, type_: str, tag: str, q: str) -> str:
     def opts(values, current, any_label):
@@ -845,38 +847,38 @@ def _ago(days: float) -> str:
     return t("{n} mo ago").format(n=int(days // 30))
 
 
-def _size_cell(size: int | None) -> str:
-    """Content length. Past FULL_READ_LIMIT memory_read hands back only the outline,
-    so those records are marked: candidates for a split or at least for headings."""
+def _size_text(size: int | None) -> str:
+    """Content length, for the detail row. Past FULL_READ_LIMIT memory_read hands back
+    only the outline, so those records are worth a split or at least headings."""
     if size is None:
-        return "<td class=num data-sort=0></td>"
+        return ""
     shown = f"{size / 1000:.1f}k" if size >= 1000 else str(size)
-    title = t("{n} characters").format(n=size)
-    cls = ""
+    text = esc(t("{n} characters").format(n=size)) + f" ({esc(shown)})"
     if size >= FULL_READ_LIMIT:
-        cls = " stale"
-        title += " · " + t("over the limit: memory_read returns only the outline")
-    return f"<td class='num{cls}' data-sort={size} title='{esc(title)}'>{esc(shown)}</td>"
+        text += (f" · <span class=stale>"
+                 f"{esc(t('over the limit: memory_read returns only the outline'))}</span>")
+    return text
 
 
-def _verified_label(m: dict) -> str:
-    """Short form for the table: when the record was last confirmed against reality.
-
-    `updated` cannot answer this — on a record nobody has touched it is just the day
-    it was written, which reads as fresh while saying nothing about whether the claims
-    still hold. The dash is the useful state to be able to see at a glance: never
-    checked. Anything older than STALE marks itself, matching what memory_lint reports
-    so the web and the check cannot disagree.
-    """
+def _row_marks(m: dict, size: int | None) -> str:
+    """Small signs beside a name in the list, for what used to have a column of its own
+    (dropped 2026-11-17 so name, description, tags and updated get the room): a lock for
+    narrowed sharing, a warning for a record past the full-read limit, an hourglass for
+    a verification older than STALE_AFTER_DAYS. Ordinary records carry none; the full
+    values are in the row's detail."""
+    out = []
+    share = m.get("share")
+    if share is not None:
+        who = t("nobody") if not share else t("{n} agents").format(n=len(share))
+        cls = " class=warn" if not share else ""
+        out.append(f"<span{cls} title='{esc(t('visible to'))}: {esc(who)}'>🔒</span>")
+    if size is not None and size >= FULL_READ_LIMIT:
+        out.append(f"<span class=stale title='{esc(t('over the limit: memory_read returns only the outline'))}'>⚠</span>")
     v = m.get("verified")
-    if not v:
-        return f"<span class=muted title='{esc(t('never confirmed'))}'>—</span>"
-    age = _age_days(v)
-    if age is None:
-        return f"<span title='{esc(m.get('verified_by') or '')}'>{esc(v[:10])}</span>"
-    cls = " class=stale" if age >= lint.STALE_AFTER_DAYS else ""
-    title = f"{v[:10]} · {m.get('verified_by') or '?'}"
-    return f"<span{cls} title='{esc(title)}'>{esc(_ago(age))}</span>"
+    age = _age_days(v) if v else None
+    if age is not None and age >= lint.STALE_AFTER_DAYS:
+        out.append(f"<span class=stale title='{esc(t('checked'))}: {esc(_ago(age))}'>⏳</span>")
+    return (" " + " ".join(out)) if out else ""
 
 
 def _verified_detail(m: dict) -> str:
@@ -899,7 +901,7 @@ def _age_days(ts: str) -> float | None:
     return (datetime.now(timezone.utc) - when).total_seconds() / 86400
 
 
-def _detail_row(m: dict, rid: str, cols: int) -> str:
+def _detail_row(m: dict, rid: str, cols: int, size: int | None = None) -> str:
     """The expanded view of one record: the parameters that do not fit the table,
     read-only. Editing happens on the record's own page — this is for looking."""
     tags = _tag_links(m.get("tags") or []) or f"<span class=muted>{esc(t('(no tags)'))}</span>"
@@ -914,9 +916,11 @@ def _detail_row(m: dict, rid: str, cols: int) -> str:
     return (f"<tr class=detail id='{rid}' hidden><td colspan={cols}>"
             f"<div class=detailbox>"
             f"<p><em>{esc(m['description'])}</em></p>"
+            f"<p><strong>{esc(t('type'))}</strong> {esc(m['type'])}</p>"
             f"<p><strong>{esc(t('tags'))}</strong> {tags}</p>"
             f"<p><strong>{esc(t('visible to'))}</strong> {who}</p>"
             f"<p><strong>{esc(t('checked'))}</strong> {_verified_detail(m)}</p>"
+            f"<p><strong>{esc(t('size'))}</strong> {_size_text(size)}</p>"
             f"<p><strong>{esc(t('author'))}</strong> {esc(m['author'])} · "
             f"<strong>{esc(t('last'))}</strong> {esc(m['updated_by'])} "
             f"{esc(t('at'))} {esc(local_time(m['updated']))}</p>"
@@ -944,27 +948,25 @@ async def memories(request: Request):
     types = sorted({m["type"] for m in everything})
 
     sizes = STORE.sizes()
-    cols = 10
+    cols = 5
     body_rows = []
     for i, m in enumerate(items):
         rid = f"d{i}"
         link = f"/memory?ns={quote_plus(m['namespace'])}&name={quote_plus(m['name'])}"
         tags = m.get("tags") or []
+        size = sizes.get((m['namespace'], m['name']))
         # tags as chips that filter the table; the current namespace/type filter is kept
         tags_html = _tag_links(tags, ns, type_) or "<span class=muted>—</span>"
         body_rows.append(
             f"<tr class=rec><td><button type=button class=expander data-target='{rid}'"
             f" aria-expanded=false title='{esc(t('show detail'))}'>\u25b8</button></td>"
-            f"<td>{esc(m['namespace'])}</td>"
-            f"<td><a href='{link}'>{esc(m['name'])}</a></td>"
-            f"<td>{esc(m['description'])}</td>"
-            f"<td>{esc(m['type'])}</td>"
+            f"<td class=name data-sort='{esc(m['namespace'] + '/' + m['name'])}'>"
+            f"<span class=muted>{esc(m['namespace'])}/</span>"
+            f"<a href='{link}'>{esc(m['name'])}</a>{_row_marks(m, size)}</td>"
+            f"<td class=desc><div class=clamp>{esc(m['description'])}</div></td>"
             f"<td class=tags data-sort='{esc(' '.join(tags))}'>{tags_html}</td>"
-            f"{_size_cell(sizes.get((m['namespace'], m['name'])))}"
-            f"<td>{_share_label(m.get('share'))}</td>"
-            f"<td data-sort='{esc(m.get('verified') or '')}'>{_verified_label(m)}</td>"
-            f"<td data-sort='{esc(m['updated'])}'>{esc(local_time(m['updated']))}</td></tr>")
-        body_rows.append(_detail_row(m, rid, cols))
+            f"<td class=date data-sort='{esc(m['updated'])}'>{esc(local_time(m['updated']))}</td></tr>")
+        body_rows.append(_detail_row(m, rid, cols, size))
     rows = "".join(body_rows) or f"<tr><td colspan={cols}>{esc(t('(nothing)'))}</td></tr>"
 
     def th(label: str, sortable: bool = True) -> str:
@@ -977,12 +979,12 @@ async def memories(request: Request):
     body = (f"<h2>{esc(title)}</h2>"
             f"{_filter_bar(namespaces, types, STORE.known_tags(), ns, type_, tag, q)}"
             f"<p class=muted>{esc(count)} · <a href='/tags'>{esc(t('Manage tags'))}</a></p>"
-            f"<table><thead><tr><th></th>{th('ns')}{th(t('name'))}"
-            f"{th(t('description'), False)}{th(t('type'))}"
-            f"{th(t('tags'))}{th(t('size'))}{th(t('visible to'))}"
-            f"{th(t('checked'))}{th(t('updated'))}</tr></thead>"
-            f"<tbody>{rows}</tbody></table>{ROW_TOGGLE_JS}{SORT_JS}")
-    return layout(title, body)
+            f"<div class=tablewrap><table><thead><tr><th></th>{th(t('name'))}"
+            f"{th(t('description'), False)}"
+            f"{th(t('tags'))}"
+            f"{th(t('updated'))}</tr></thead>"
+            f"<tbody>{rows}</tbody></table></div>{ROW_TOGGLE_JS}{SORT_JS}")
+    return layout(title, body, wide=True)
 
 
 # ---------- attachments ----------

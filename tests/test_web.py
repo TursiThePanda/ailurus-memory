@@ -153,18 +153,35 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     # the tags column holds the tags themselves, as filter links
     assert "<td class=tags data-sort='network'><a class=tag href='/memories?tag=network'>" \
         in listing, "the tags column should list the tags as filter links"
-    # size column: character count, sortable by the raw number
+    # size: no longer a column -- the detail row says it, and a record past the
+    # full-read limit gets a warning sign beside its name
     seed_size = len(s.read("shared", "seed")["content"])
-    assert f"data-sort={seed_size} " in listing, "the size column should carry the raw count"
-    big = "x" * 13_000
-    s.write(content=big, description="big record", agent="claude",
+    assert f"{seed_size} characters" in listing, "the detail should give the size"
+    s.write(content="x" * 13_000, description="big record", agent="claude",
             namespace="shared", name="long")
-    assert "num stale' data-sort=13000" in c.get("/memories").text, \
-        "a record past the full-read limit should be marked"
+    big_listing = c.get("/memories").text
+    row = big_listing[big_listing.index(">long</a>"):][:300]
+    assert "class=stale" in row and "⚠" in row, "a record past the limit should be marked"
     s.delete("shared", "long", agent="claude")
     # sorting: headers are clickable, rows sit in a tbody the script can reorder
     assert "th class=sortable" in listing and "<tbody>" in listing
     assert "aria-sort" in listing, "the sort script should be on the page"
+    # width: a long description is clamped (whole text stays in the detail row), the
+    # table scrolls inside its own box and the list page is the wide layout -- before
+    # this, one long path in a description pushed the table past the page
+    assert "<td class=desc><div class=clamp>seed record</div></td>" in listing
+    assert "<div class=tablewrap><table>" in listing and "<main class=wide>" in listing
+    assert "<main class=wide>" not in c.get("/tags").text, "only the list is wide"
+    # type is no longer a column (David 2026-11-17: room for the description) but
+    # stays in the expanded detail and in the filter bar
+    assert "<td>reference</td>" not in listing
+    assert "<p><strong>type</strong> reference</p>" in listing
+    # "visible to" went the same way: detail only, plus a lock beside a restricted name
+    assert ">visible to</th>" not in listing and "<strong>visible to</strong>" in listing
+    # what is left in the row: name (namespace in front), description, tags, updated
+    heads = re.findall(r"<th[^>]*>([^<]*)</th>", listing[listing.index("<thead>"):])
+    assert heads[:5] == ["", "name", "description", "tags", "updated"], heads
+    assert "<span class=muted>shared/</span><a href=" in listing
     # checked: a relative age rather than a bare date
     assert webapp._ago(0.2) == "today" and webapp._ago(3.5) == "3 d ago"
     assert webapp._ago(100) == "3 mo ago"

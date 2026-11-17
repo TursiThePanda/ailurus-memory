@@ -4,6 +4,16 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [Unreleased]
+
+### Changed
+- **The memory list fits the page.** One long path or URL in a description used to
+  push the table past the right edge. The list now has four columns — name (with its
+  namespace in front), description clamped to two lines, tags, updated — and a wider
+  page. Type, visibility, size and the last check moved into the row's detail (▸);
+  a 🔒, ⚠ or ⏳ beside the name flags narrowed sharing, a record past the full-read
+  limit and an old verification.
+
 ## [1.6.1] — 2026-11-17
 
 ### Added
