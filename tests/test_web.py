@@ -150,6 +150,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     listing = c.get("/memories").text
     assert "class=expander" in listing and "class=detail" in listing
     assert "hidden" in listing, "the detail row should start collapsed"
+    assert "<td class=num title='network'>1</td>" in listing, \
+        "hovering the tag count should name the tags"
 
     # editing a record through the UI: description, type, tags and content
     page = c.get("/memory", params={"ns": "shared", "name": "seed"}).text

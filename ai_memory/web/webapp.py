@@ -886,7 +886,10 @@ async def memories(request: Request):
     for i, m in enumerate(items):
         rid = f"d{i}"
         link = f"/memory?ns={quote_plus(m['namespace'])}&name={quote_plus(m['name'])}"
-        ntags = len(m.get("tags") or [])
+        tags = m.get("tags") or []
+        # the count alone says nothing; hovering it names the tags (native tooltip)
+        tags_cell = (f"<td class=num title='{esc(', '.join(tags))}'>{len(tags)}</td>"
+                     if tags else "<td class=num>0</td>")
         body_rows.append(
             f"<tr><td><button type=button class=expander data-target='{rid}'"
             f" aria-expanded=false title='{esc(t('show detail'))}'>\u25b8</button></td>"
@@ -894,7 +897,7 @@ async def memories(request: Request):
             f"<td><a href='{link}'>{esc(m['name'])}</a></td>"
             f"<td>{esc(m['description'])}</td>"
             f"<td>{esc(m['type'])}</td>"
-            f"<td class=num>{ntags}</td>"
+            f"{tags_cell}"
             f"<td>{_share_label(m.get('share'))}</td>"
             f"<td>{_verified_label(m)}</td>"
             f"<td>{esc(local_time(m['updated']))}</td></tr>")
