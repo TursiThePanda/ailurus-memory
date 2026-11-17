@@ -16,11 +16,30 @@ Findings carry a severity so a caller can show the important ones first:
 """
 from __future__ import annotations
 
+import difflib
 import re
 from collections import Counter
 from datetime import datetime, timezone
 
 LINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+
+# Code is quoted, not linked: a `[[name]]` inside backticks or a fenced block is an
+# example of the syntax (the conventions and the instructions are full of them).
+CODE_RE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
+
+# Placeholders people write when they talk ABOUT links in prose -- "keeps a one-line
+# [[link]]". Measured 2026-11-17: these were 2 of the 6 "broken links" in the live
+# store, and both were records explaining the convention.
+LINK_PLACEHOLDERS = frozenset({
+    "link", "links", "name", "names", "their-name", "record", "record-name", "ns/name",
+    "namespace/name", "...", "x",
+})
+
+# How alike a name must be to be offered as the intended target of a broken link.
+# High on purpose: a suggestion is what lets an agent fix the link without asking, so
+# a wrong one is worse than none.
+SUGGEST_CUTOFF = 0.8
+
 HEADING_RE = re.compile(r"^#{1,6}\s+\S", re.MULTILINE)
 
 # Facts that rot: an address, a port, a version. A record that holds none of these —
@@ -98,18 +117,35 @@ def _finding(severity: str, check: str, namespace: str, name: str, detail: str) 
 def check_links(records: list[dict]) -> list[dict]:
     """`[[links]]` pointing at a record that does not exist.
 
-    Links are matched by NAME across every namespace, which is how they are written —
-    `[[reference-lmstudio]]`, not `[[shared/reference-lmstudio]]`. A rename therefore
-    breaks every link to the old name, which is exactly what this catches.
+    Links are mostly written by NAME across every namespace -- `[[reference-lmstudio]]`
+    -- but agents also write the full `[[shared/reference-lmstudio]]`, so both forms
+    resolve. A rename therefore breaks every link to the old name, which is exactly
+    what this catches.
+
+    Not links: anything inside backticks or a fenced code block, and the handful of
+    placeholder words (LINK_PLACEHOLDERS) used when prose explains the syntax itself.
+
+    A broken link carries `target` and, when one existing name is close enough,
+    `suggestion` -- the likely intended record, usually a rename or a typo.
     """
-    known = {r["name"] for r in records}
+    names = {r["name"] for r in records}
+    full = {f"{r['namespace']}/{r['name']}" for r in records}
     out = []
     for r in records:
-        for target in dict.fromkeys(LINK_RE.findall(r.get("content") or "")):
-            if target not in known:
-                out.append(_finding(
-                    "broken", "link", r["namespace"], r["name"],
-                    f"links to [[{target}]], which does not exist"))
+        text = CODE_RE.sub(" ", r.get("content") or "")
+        for target in dict.fromkeys(t.strip() for t in LINK_RE.findall(text)):
+            if target.lower() in LINK_PLACEHOLDERS or target in names or target in full:
+                continue
+            bare = target.rsplit("/", 1)[-1]
+            close = difflib.get_close_matches(bare, names, n=1, cutoff=SUGGEST_CUTOFF)
+            detail = f"links to [[{target}]], which does not exist"
+            if close:
+                detail += f"; closest existing record: {close[0]}"
+            f = _finding("broken", "link", r["namespace"], r["name"], detail)
+            f["target"] = target
+            if close:
+                f["suggestion"] = close[0]
+            out.append(f)
     return out
 
 

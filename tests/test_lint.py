@@ -58,6 +58,27 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     check("a broken link counts as broken",
           all(f["severity"] == "broken" for f in findings if f["check"] == "link"))
 
+    # links that are NOT broken, measured on the live store 2026-11-17: the full
+    # ns/name form, syntax examples in prose, and anything quoted as code
+    s.write(content="See [[shared/good]]. Keep a one-line [[link]] to [[links]].\n"
+                    "Write it as `[[ghost-in-code]]`, or:\n```\n[[ghost-in-fence]]\n```\n"
+                    "But [[shared/ghost]] and [[goood]] are real mistakes.",
+            description="links in every form", agent="claude",
+            namespace="shared", name="forms", tags=["network"])
+    found = [f for f in lint.check_links(s.dump()) if f["name"] == "forms"]
+    targets = {f["target"] for f in found}
+    check("ns/name link to an existing record resolves", "shared/good" not in targets)
+    check("placeholder words are not links", not ({"link", "links"} & targets))
+    check("links inside code are ignored",
+          not ({"ghost-in-code", "ghost-in-fence"} & targets))
+    check("a missing ns/name link is still caught", "shared/ghost" in targets)
+    typo = [f for f in found if f["target"] == "goood"]
+    check("a typo gets the closest existing name as suggestion",
+          bool(typo) and typo[0].get("suggestion") == "good")
+    ghost = [f for f in found if f["target"] == "shared/ghost"]
+    check("no suggestion when nothing is close", bool(ghost) and "suggestion" not in ghost[0])
+    s.delete("shared", "forms", agent="claude")
+
     # pending markers
     check("finds a leftover pending marker", "bad" in names_for(findings, "pending"))
     check("does not flag a healthy record as pending",
