@@ -4,7 +4,7 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
-## [Unreleased]
+## [1.6.2] — 2026-11-17
 
 ### Changed
 - **The memory list fits the page.** One long path or URL in a description used to
