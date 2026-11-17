@@ -4,6 +4,22 @@ All notable changes to Ailurus Memory (`ai-memory`). Versions follow
 [semantic versioning](https://semver.org/). Releases before 1.2.0 were published from a
 private repository; their entries are summaries of its history.
 
+## [1.6.1] — 2026-11-17
+
+### Added
+- **Memory upkeep by the agents** (*Settings*, off by default). With it on, a record an
+  agent reads or writes comes back with an `upkeep` list of the problems found in it,
+  each marked `safe` (the agent fixes it on its own: broken links with an obvious
+  target, missing tags or description, missing headings), `ask_user` (one subject or
+  two, still true, delete — raised only when the user brings that subject up) or `note`.
+  Agents record what they did with the new `resolve` parameter of `memory_lint`
+  (`fixed`, `not_a_problem`, `user_said_keep`); decisions are stored encrypted, shared by
+  all agents, and an agent can only decide about records it may write. The overview
+  shows one line about it, and a page lists open items and decisions, where the owner
+  can reopen or keep one. No new MCP tool.
+- `memory_lint` findings carry an `id` and a `fix`, and decided items are left out
+  (`dismissed` says how many).
+
 ## [1.6.0] — 2026-11-17
 
 ### Added

@@ -289,7 +289,7 @@ This is deliberately a user-only control: `share` can only be set through the ad
 | `memory_history` | Version history of one record (who/when/what), oldest to newest. |
 | `memory_revert` | Restore a record to the content of the given version (index from memory_history; 0 = oldest, -1 = previous). |
 | `memory_audit` | Who/when/where/what across the whole memory, newest first. Unlike memory_history (a single record) this shows activity over the entire store. `since` … |
-| `memory_lint` | Hygiene check over the memory: broken [[links]], records still marked as unfinished, untagged records, empty or duplicated descriptions. |
+| `memory_lint` | Hygiene check over the memory: broken [[links]], records still marked as unfinished, untagged records, empty or duplicated descriptions. Each finding has an `id` and a `fix`; `resolve=[{id, outcome}]` records a decision so the item is not raised again (see *Memory upkeep*). |
 | `memory_overlaps` | Pairs of records that appear to cover the same ground — candidates for merging. |
 
 ### Duplicates are caught on the way in
@@ -332,6 +332,33 @@ The staleness check counts from `verified` when there is one and from `updated` 
 `--all` (CLI) / `include_optional` (MCP) adds single-use tags. It is off by default because the first real run made the case against it: 9 of 19 findings were single-use tags and not one was actionable — in a small memory plenty of good categories legitimately have one member, and a check that is mostly noise teaches you to skim past the findings that matter.
 
 It reports and never edits. A curator that quietly rewrites records destroys the one property that makes the memory worth trusting: knowing who wrote what.
+
+## Memory upkeep (by the agents)
+
+*Settings* → **Memory upkeep by the agents** — off by default, per memory.
+
+The memory is mostly read and written by AI agents, so with this on they keep it in order
+as they work, instead of you. When an agent reads or writes a record that has open
+problems, the response carries a short `upkeep` list (at most three items). Each item says
+what the agent may do about it:
+
+| `fix` | Examples | What the agent does |
+|---|---|---|
+| `safe` | a broken link with an obvious target, no tags, no or echoing description, a long record without `##` headings | fixes it on its own with `memory_edit` / `memory_update` — every change lands in the history and can be reverted |
+| `ask_user` | two records that look like one subject, a record still marked as unfinished, a perishable fact nobody confirmed for months, an empty record | asks you **only when you bring that subject up yourself** — never as an opener or an aside |
+| `note` | numbers with no date or source | nothing now; it keeps it in mind the next time it writes the record |
+
+The agents report what they did with `memory_lint(resolve=[...])`: `fixed`,
+`not_a_problem` (both hold until the record changes) or `user_said_keep` (holds for
+good). The decisions are stored encrypted in the memory, so every agent sees them and
+nobody asks twice. An agent can only decide about records it may write.
+
+You do not have to do anything. The overview shows one line ("Upkeep: 4 open, 2 fixed by
+agents in the last 7 days"); it leads to a page listing what is open and what was
+decided, where you can **Reopen** a decision or **Leave** an item for good.
+
+Nothing here edits a record by itself: the agent does, in a conversation you are part
+of. A memory read aloud by a voice assistant is a good one to leave this off for.
 
 ## Attachments
 

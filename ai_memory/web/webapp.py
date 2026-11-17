@@ -46,6 +46,7 @@ from ai_memory.core import keystore
 from ai_memory.features import lint
 from ai_memory.features.sections import FULL_READ_LIMIT
 from ai_memory.features import updates
+from ai_memory.features import upkeep
 from ai_memory.server import netconf
 from ai_memory.web.i18n import LANGS, get_lang, set_lang, t
 from ai_memory.core import paths
@@ -540,7 +541,7 @@ async def dashboard(request: Request):
     perm_opts = "".join(f"<option value={p}>{p}</option>" for p in PERMS)
     matrix = _perm_matrix(request, agents, sorted(counts))
 
-    body = f"""
+    body = f"""{_upkeep_line()}
 <h2>{esc(t("Agents and keys"))}</h2>
 <table><tr><th>{esc(t("Agent"))}</th><th>{esc(t("Permissions"))}</th><th>{esc(t("Created"))}</th><th></th></tr>
 {rows or f'<tr><td colspan=4>{esc(t("(none)"))}</td></tr>'}</table>
@@ -1326,6 +1327,126 @@ async def check_updates(request: Request):
     return RedirectResponse("/settings#updates", 303)
 
 
+def _upkeep_section(request: Request) -> str:
+    on = upkeep.enabled(STORE)
+    hint = t("Off by default. With it on, the AI agents keep the memory in order as they "
+             "work: a record they read comes with the problems found in it. Safe ones "
+             "(broken links, missing tags or descriptions, missing headings) they fix on "
+             "their own; questions only you can answer they raise only when you bring the "
+             "subject up yourself.")
+    link = (f" <a href='/upkeep'>{esc(t('What the agents see and did'))} →</a>" if on else "")
+    return (
+        f"<h3 id=upkeep>{esc(t('Memory upkeep by the agents'))}</h3>"
+        f"<p class=muted>{esc(hint)}{link}</p>"
+        f"<form method=post action='/settings/upkeep'>{csrf_field(request)}"
+        f"<p><label><input type=checkbox name=enabled value=1{' checked' if on else ''}> "
+        f"{esc(t('Let the agents keep this memory in order'))}</label></p>"
+        f"<button type=submit>{esc(t('Save'))}</button></form>")
+
+
+async def save_upkeep(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/settings")
+    upkeep.set_enabled(STORE, bool(form.get("enabled")))
+    return RedirectResponse("/settings#upkeep", 303)
+
+
+FIX_LABELS = {"safe": "agents fix it", "ask_user": "asks you, on topic",
+              "note": "kept in mind"}
+OUTCOME_LABELS = {"fixed": "fixed", "not_a_problem": "not a problem",
+                  "user_said_keep": "you said keep"}
+
+
+def _record_links(records: list[str]) -> str:
+    out = []
+    for rec in records:
+        ns, name = rec.split("/", 1)
+        out.append(f"<a href='/memory?ns={quote_plus(ns)}&name={quote_plus(name)}'>"
+                   f"{esc(rec)}</a>")
+    return " ↔ ".join(out)
+
+
+def _overrule_form(request: Request, fid: str, action: str, label: str) -> str:
+    return (f"<form method=post action='/upkeep/overrule' class=inline>{csrf_field(request)}"
+            f"<input type=hidden name=id value='{esc(fid)}'>"
+            f"<input type=hidden name=action value='{esc(action)}'>"
+            f"<button type=submit class=ghost>{esc(t(label))}</button></form>")
+
+
+async def upkeep_page(request: Request):
+    """What the agents are told and what they did. Read-only apart from overruling:
+    the owner does not work through this list -- the agents do (David, 2026-11-17)."""
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    found, _ = await run_in_threadpool(upkeep.open_findings, STORE)
+    rows = []
+    for f in sorted(found, key=lambda f: (("safe", "ask_user", "note").index(f["fix"]),
+                                          f["records"])):
+        rows.append(f"<tr><td>{_record_links(f['records'])}</td>"
+                    f"<td>{esc(f['check'])}</td><td>{esc(f['detail'])}</td>"
+                    f"<td>{esc(t(FIX_LABELS[f['fix']]))}</td>"
+                    f"<td>{_overrule_form(request, f['id'], 'keep', 'Leave it')}</td></tr>")
+    open_tbl = (f"<table><thead><tr><th>{esc(t('record'))}</th><th>{esc(t('check'))}</th>"
+                f"<th>{esc(t('what is wrong'))}</th><th>{esc(t('who acts'))}</th><th></th>"
+                f"</tr></thead><tbody>{''.join(rows)}</tbody></table>" if rows
+                else f"<p class=ok>{esc(t('Nothing open.'))}</p>")
+    decided = sorted(upkeep.decisions(STORE).items(), key=lambda kv: kv[1].get("at", ""),
+                     reverse=True)
+    drows = []
+    for fid, d in decided[:200]:
+        drows.append(f"<tr><td>{esc(local_time(d.get('at', '')))}</td>"
+                     f"<td>{esc(d.get('by', ''))}</td>"
+                     f"<td>{esc(t(OUTCOME_LABELS.get(d.get('outcome'), d.get('outcome', ''))))}</td>"
+                     f"<td>{_record_links(d.get('records', []))}</td>"
+                     f"<td>{esc(d.get('detail', ''))}</td>"
+                     f"<td>{_overrule_form(request, fid, 'reopen', 'Reopen')}</td></tr>")
+    done_tbl = (f"<table><thead><tr><th>{esc(t('when'))}</th><th>{esc(t('who'))}</th>"
+                f"<th>{esc(t('decision'))}</th><th>{esc(t('record'))}</th>"
+                f"<th>{esc(t('what it was'))}</th><th></th></tr></thead>"
+                f"<tbody>{''.join(drows)}</tbody></table>" if drows
+                else f"<p class=muted>{esc(t('No decisions yet.'))}</p>")
+    off = ("" if upkeep.enabled(STORE) else
+           f"<p class=warn>{esc(t('Upkeep is off: agents do not see any of this.'))} "
+           f"<a href='/settings#upkeep'>{esc(t('Settings'))}</a></p>")
+    intro = t("You do not need to work through this -- the agents do. "
+              "You can only overrule them.")
+    body = (f"<h2>{esc(t('Memory upkeep'))}</h2>{off}"
+            f"<p class=muted>{esc(intro)}</p>"
+            f"<h3>{esc(t('Open'))}</h3>{open_tbl}"
+            f"<h3>{esc(t('Decided'))}</h3>{done_tbl}")
+    return layout(t("Memory upkeep"), body)
+
+
+async def upkeep_overrule(request: Request):
+    if not authed(request):
+        return RedirectResponse("/login", 303)
+    form = await request.form()
+    if not await check_csrf(request, form):
+        return _err(t("CSRF token mismatch."), "/upkeep")
+    action = form.get("action", "")
+    if action in ("reopen", "keep"):
+        await run_in_threadpool(upkeep.overrule, STORE, str(form.get("id", "")), action)
+    return RedirectResponse("/upkeep", 303)
+
+
+def _upkeep_line() -> str:
+    """One line on the overview, only while upkeep is on."""
+    if not upkeep.enabled(STORE):
+        return ""
+    try:
+        sm = upkeep.summary(STORE)
+    except Exception:
+        return ""
+    text = t("Upkeep: {open} open ({ask} waiting for you to bring the subject up), "
+             "{fixed} fixed by agents in the last {days} days").format(
+        open=sm["open"], ask=sm["by_fix"]["ask_user"], fixed=sm["fixed_recently"],
+        days=sm["days"])
+    return f"<p class=muted><a href='/upkeep'>{esc(text)}</a></p>"
+
+
 async def settings_page(request: Request):
     if not authed(request):
         return RedirectResponse("/login", 303)
@@ -1401,6 +1522,7 @@ def _settings_response(request: Request, modal: str = "") -> HTMLResponse:
 
         f"{_restore_section(request)}"
         f"{_updates_section(request)}"
+        f"{_upkeep_section(request)}"
         f"<h3>{esc(t('Master passphrase'))}</h3>")
 
     if not can_remember:
@@ -2067,6 +2189,9 @@ routes = [
     Route("/settings/tls/cert", download_cert),
     Route("/settings/autostart", save_autostart, methods=["POST"]),
     Route("/settings/updates", save_updates, methods=["POST"]),
+    Route("/settings/upkeep", save_upkeep, methods=["POST"]),
+    Route("/upkeep", upkeep_page),
+    Route("/upkeep/overrule", upkeep_overrule, methods=["POST"]),
     Route("/settings/updates/check", check_updates, methods=["POST"]),
     Route("/settings/restore", restore_upload, methods=["POST"]),
     Route("/settings/restore/apply", restore_apply, methods=["POST"]),

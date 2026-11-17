@@ -13,6 +13,33 @@ LANGS = {"en": "English", "cs": "Čeština"}
 _lang: ContextVar[str] = ContextVar("lang", default=DEFAULT_LANG)
 
 CS = {
+    # memory upkeep (1.6.1)
+    'Off by default. With it on, the AI agents keep the memory in order as they work: a record they read comes with the problems found in it. Safe ones (broken links, missing tags or descriptions, missing headings) they fix on their own; questions only you can answer they raise only when you bring the subject up yourself.': 'Ve výchozím stavu vypnuto. Když to zapneš, AI agenti při práci udržují paměť v pořádku: záznam, který čtou, přijde i s problémy, které v něm server našel. Bezpečné (rozbité odkazy, chybějící tagy nebo popis, chybějící nadpisy) opraví sami; otázky, na které umíš odpovědět jen ty, položí jen tehdy, když to téma otevřeš sám.',
+    'What the agents see and did': 'Co agenti vidí a co udělali',
+    'Memory upkeep by the agents': 'Údržba paměti agenty',
+    'Let the agents keep this memory in order': 'Nechat agenty udržovat tuhle paměť v pořádku',
+    'agents fix it': 'opraví agenti',
+    'asks you, on topic': 'zeptá se tě, až na to přijde řeč',
+    'kept in mind': 'jen na vědomí',
+    'fixed': 'opraveno',
+    'not a problem': 'není problém',
+    'you said keep': 'nechat, jak je',
+    'Leave it': 'Nechat být',
+    'Reopen': 'Znovu otevřít',
+    'record': 'záznam',
+    'check': 'kontrola',
+    'what is wrong': 'co je špatně',
+    'who acts': 'kdo jedná',
+    'Nothing open.': 'Nic otevřeného.',
+    'decision': 'rozhodnutí',
+    'what it was': 'o co šlo',
+    'No decisions yet.': 'Zatím žádná rozhodnutí.',
+    'Upkeep is off: agents do not see any of this.': 'Údržba je vypnutá: agenti nic z toho nevidí.',
+    'You do not need to work through this -- the agents do. You can only overrule them.': 'Tohle procházet nemusíš -- dělají to agenti. Můžeš je jen přehlasovat.',
+    'Memory upkeep': 'Údržba paměti',
+    'Open': 'Otevřené',
+    'Decided': 'Rozhodnuté',
+    'Upkeep: {open} open ({ask} waiting for you to bring the subject up), {fixed} fixed by agents in the last {days} days': 'Údržba: {open} otevřených ({ask} čeká, až to téma otevřeš), {fixed} opravili agenti za posledních {days} dní',
     # update check (1.4.0)
     'A new version is available': 'Je k dispozici nová verze',
     'this one runs': 'tady běží',

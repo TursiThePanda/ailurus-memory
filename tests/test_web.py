@@ -442,6 +442,36 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         assert "A new version is available" not in c.get("/").text, "off = silent"
     print("update check OK")
 
+    # memory upkeep: off by default, one switch in Settings, a read-only page + overrule
+    from ai_memory.features import upkeep as upk
+    with mock.patch.object(webapp.cli, "autostart_status",
+                           return_value={"service": False, "indicator": None}):
+        page = c.get("/settings").text
+        assert "Memory upkeep by the agents" in page and not upk.enabled(s)
+        assert "Upkeep:" not in c.get("/").text, "off = no overview line"
+        r = c.post("/settings/upkeep", follow_redirects=False,
+                   data={"csrf": csrf_of(page), "enabled": "1"})
+        assert r.status_code == 303 and upk.enabled(s)
+    assert "Upkeep:" in c.get("/").text, "on = one line on the overview"
+    up = c.get("/upkeep").text
+    assert "Memory upkeep" in up and "Open" in up and "Decided" in up
+    open_now, _ = upk.open_findings(s)
+    if open_now:
+        fid = open_now[0]["id"]
+        r = c.post("/upkeep/overrule", follow_redirects=False,
+                   data={"csrf": csrf_of(up), "id": fid, "action": "keep"})
+        assert r.status_code == 303 and upk.decisions(s)[fid]["outcome"] == "user_said_keep"
+        r = c.post("/upkeep/overrule", follow_redirects=False,
+                   data={"csrf": csrf_of(c.get("/upkeep").text), "id": fid, "action": "reopen"})
+        assert fid not in upk.decisions(s)
+    r = c.post("/upkeep/overrule", data={"id": "x", "action": "keep"})
+    assert "CSRF" in r.text, "no token, no change"
+    with mock.patch.object(webapp.cli, "autostart_status",
+                           return_value={"service": False, "indicator": None}):
+        c.post("/settings/upkeep", data={"csrf": csrf_of(c.get("/settings").text)})
+    assert not upk.enabled(s)
+    print("upkeep OK")
+
     # logout
     assert c.get("/logout").status_code == 405, "logout is POST-only"
     r = c.post("/logout", follow_redirects=False)

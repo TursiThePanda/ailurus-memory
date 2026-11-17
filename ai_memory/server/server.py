@@ -25,6 +25,7 @@ from ai_memory.features import lint
 from ai_memory.server import netconf
 from ai_memory.features import sections
 from ai_memory.features import updates
+from ai_memory.features import upkeep
 from ai_memory.core import paths
 from ai_memory.core.store import SecureStore
 from ai_memory.core.unlock import get_passphrase
@@ -83,6 +84,12 @@ def _build_instructions() -> str:
             notice = ""
         if notice:
             base = f"{base}\n\n{notice}"
+        try:  # off unless the owner enabled upkeep (features/upkeep.py)
+            care = upkeep.agent_notice(STORE)
+        except Exception:
+            care = ""
+        if care:
+            base = f"{base}\n\n{care}"
         items = _readable_for(agent)
         if not items:
             return base + "\n\nINDEX\n(the store is still empty)"
@@ -136,6 +143,27 @@ def _viewer() -> str | None:
     there. Keeping the two consistent matters: a record hidden by `share` but visible
     by namespace (or the reverse) would be a confusing half-permission."""
     return _agent() if MODE_HTTP else None
+
+
+def _can_read(namespace: str) -> bool:
+    return not MODE_HTTP or STORE.can(current_agent.get(), namespace, "r")
+
+
+def _can_write(namespace: str) -> bool:
+    return not MODE_HTTP or STORE.can(current_agent.get(), namespace, "w")
+
+
+def _with_upkeep(out: dict, namespace: str, name: str) -> dict:
+    """Attach the record's open upkeep items, if the owner turned upkeep on. Never
+    raises and adds nothing when there is nothing to say."""
+    try:
+        hints = upkeep.hints_for(STORE, namespace, name, agent=_viewer(),
+                                 readable=_can_read)
+    except Exception:
+        hints = []
+    if hints:
+        out["upkeep"] = hints
+    return out
 
 
 def _enforce(namespace: str, need: str) -> None:
@@ -208,7 +236,7 @@ def memory_write(content: str, description: str, namespace: str | None = None,
         out["warning"] = (
             "an existing record covers similar ground — check whether this should have "
             "been a memory_update on it instead of a second record")
-    return out
+    return _with_upkeep(out, out["namespace"], out["name"])
 
 
 @mcp.tool()
@@ -227,7 +255,7 @@ def memory_update(namespace: str, name: str, content: str | None = None,
     # nag about the very thing we asked for.
     full = STORE.read(namespace, name, agent=_viewer())
     _reindex(out["namespace"], out["name"], full["description"], full["content"])
-    return out
+    return _with_upkeep(out, out["namespace"], out["name"])
 
 
 @mcp.tool()
@@ -240,7 +268,9 @@ def memory_verify(namespace: str, name: str) -> dict:
     because the staleness check then stops pointing at the records that need looking
     at. Editing the content clears the stamp automatically."""
     _enforce(namespace, "w")
-    return STORE.mark_verified(namespace, name, agent=_agent())
+    out = STORE.mark_verified(namespace, name, agent=_agent())
+    upkeep.invalidate()  # a stamp does not move the change token
+    return out
 
 
 @mcp.tool()
@@ -269,7 +299,7 @@ def memory_edit(namespace: str, name: str, find: str, replace: str,
                           f"changed. Re-check the text, or pass expect={found}."}
     out = STORE.update(namespace=namespace, name=name, agent=_agent(),
                        content=content.replace(find, replace))
-    return {"changed": True, "replacements": found, **out}
+    return _with_upkeep({"changed": True, "replacements": found, **out}, namespace, name)
 
 
 @mcp.tool()
@@ -292,7 +322,8 @@ def memory_read(namespace: str, name: str, section: str | None = None,
     """
     _enforce(namespace, "r")
     rec = STORE.read(namespace, name, agent=_viewer())
-    return sections.shape(rec, section=section, outline=outline)
+    return _with_upkeep(sections.shape(rec, section=section, outline=outline),
+                        rec["namespace"], rec["name"])
 
 
 # How big a single attachment may be. Generous, because the owner's answer to "the database
@@ -454,14 +485,21 @@ def memory_audit(limit: int = 50, since: str | None = None,
 
 @mcp.tool()
 def memory_lint(severity: str | None = None, limit: int = 100,
-                include_optional: bool = False) -> dict:
+                include_optional: bool = False,
+                resolve: list[dict] | None = None) -> dict:
     """Hygiene check over the memory: broken [[links]], records still marked as
     unfinished, untagged records, empty or duplicated descriptions.
 
     It REPORTS, it does not fix anything — decide with the user what to do with each
     finding. `severity` filters to 'broken' (provably wrong now), 'stale' (the record
     says of itself it is unfinished) or 'hygiene' (decay, nothing is broken).
-    You only see records you may read.
+    You only see records you may read. Every finding has an `id` and a `fix`
+    ('safe' / 'ask_user' / 'note' — see MEMORY UPKEEP in your instructions, if present).
+
+    `resolve=[{"id": ..., "outcome": ...}]` records a decision first, so nobody raises
+    the item again: 'fixed' (you fixed it), 'not_a_problem' (both hold until the record
+    changes) or 'user_said_keep' (the user decided to leave it; holds for good). Decided
+    items are left out of the findings; `dismissed` says how many.
 
     The reply also carries `backup`, which is NOT about the records: it is whether the
     store has been backed up recently enough. It rides along here because this is the
@@ -469,18 +507,27 @@ def memory_lint(severity: str | None = None, limit: int = 100,
     backup quietly stopped is the least healthy state it can be in — discovered when it
     is needed, which is the one moment nothing can be done. `backup.stale` is only ever
     true when an export is configured and overdue; tell the user, do not act on it."""
+    resolved = None
+    if resolve:
+        resolved = upkeep.resolve(STORE, resolve, agent=_agent(),
+                                  agent_may_write=_can_write, readable=_can_read)
     records = STORE.dump(agent=_viewer())
     if MODE_HTTP:
         records = [r for r in records if STORE.can(_agent(), r["namespace"], "r")]
     findings = lint.run(records, include_optional=include_optional,
                         reads_since=STORE.reads_since())
+    findings, dismissed = upkeep.apply_decisions(STORE, findings)
     if severity:
         findings = [f for f in findings if f["severity"] == severity]
     backup = export.staleness(export.config(STORE), token=STORE.change_token())
     backup["message"] = export.staleness_message(backup)
-    return {"summary": lint.summarize(findings),
-            "backup": backup,
-            "findings": findings[:max(1, min(limit, 500))]}
+    out = {"summary": lint.summarize(findings),
+           "dismissed": dismissed,
+           "backup": backup,
+           "findings": findings[:max(1, min(limit, 500))]}
+    if resolved is not None:
+        out["resolve"] = resolved
+    return out
 
 
 def _semantic_or_hint(fn, *args, **kwargs):
