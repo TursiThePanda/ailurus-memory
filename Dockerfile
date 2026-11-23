@@ -22,7 +22,7 @@
 # The base is pinned by the digest of its multi-arch INDEX (not of one platform's
 # manifest), so the amd64 and the arm64 builds both resolve to the same release.
 # Dependabot (.github/dependabot.yml) proposes digest bumps; refresh the lock after one.
-FROM docker.io/library/python:3.14.9-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8 AS base
+FROM docker.io/library/python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
